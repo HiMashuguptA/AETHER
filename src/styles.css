@@ -1,0 +1,165 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   ÆTHER design tokens (Stage 01, approved)
+   Core colours → semantic roles. Colour is light, not paint:
+   UI surfaces stay flat; violet is the only interactive accent.
+------------------------------------------------------------------- */
+@theme {
+  --font-sans: "Geist Variable", "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
+
+  --color-obsidian: #000000;
+  --color-graphite: #181818;
+  --color-raised: #1f1f1f;
+  --color-raised-2: #272727;
+  --color-raised-3: #313131;
+  --color-hairline: #2a2a2e;
+  --color-hairline-strong: #3b3b3e;
+
+  --color-mist: #f2f2f3;
+  --color-text-2: #c4c5cb;
+  --color-text-3: #8c8d93;
+  --color-text-4: #636469;
+  --color-light: #fafafa;
+
+  --color-violet-200: #c9bcff;
+  --color-violet-300: #bdadff;
+  --color-violet-350: #b19bff;
+  --color-violet-400: #a48dff;
+  --color-violet-500: #8b70ec;
+  --color-violet-600: #7358cc;
+  --color-violet-700: #6045b0;
+  --color-violet-800: #4d3494;
+  --color-violet-900: #2c1560;
+  --color-cobalt-500: #3a63d8;
+  --color-cobalt-400: #5b87f7;
+  --color-cyan-500: #62c8d9;
+  --color-red-500: #e5484d;
+  --color-red-400: #ff6a6a;
+  --color-green-500: #34b27f;
+  --color-yellow-500: #e8b83e;
+
+  --ease-aether: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-aether-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-aether-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root {
+  color-scheme: dark;
+  --nav-h: 64px;
+}
+
+html {
+  background: #000;
+  color: var(--color-mist);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-stopped { overflow: hidden; }
+
+body { margin: 0; min-height: 100vh; overflow-x: hidden; }
+::selection { background: rgba(139, 112, 236, 0.45); color: #fff; }
+
+h1, h2, h3 { text-wrap: balance; }
+p { text-wrap: pretty; }
+
+/* Accessible focus: a 2px violet ring with an offset, never removed */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--color-violet-500);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+.skip-link {
+  position: fixed; left: 16px; top: -64px; z-index: 1000;
+  background: var(--color-light); color: #000; padding: 8px 12px; border-radius: 999px;
+  font: 600 14px/20px var(--font-sans); text-decoration: none;
+  transition: top 300ms var(--ease-aether);
+}
+.skip-link:focus { top: 16px; }
+
+/* ---------------- surfaces & materials ---------------- */
+.glass {
+  background: rgba(31, 31, 31, 0.64);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  backdrop-filter: blur(24px) saturate(120%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.glass-strong {
+  background: rgba(20, 20, 22, 0.86);
+  -webkit-backdrop-filter: blur(28px) saturate(120%);
+  backdrop-filter: blur(28px) saturate(120%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.hairline { border: 1px solid var(--color-hairline); }
+.card { background: #141416; border: 1px solid var(--color-hairline); border-radius: 16px; }
+.elev-2 { box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.7); }
+.elev-3 { box-shadow: 0 24px 64px -16px rgba(0, 0, 0, 0.8); }
+
+/* Hero heading: the one place a gradient is allowed — on text, never a background */
+.text-gradient-hero {
+  background: linear-gradient(90deg, #ffffff 0%, #9b9b9b 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+/* Muse provenance: anything the AI proposed glows violet until accepted */
+.muse-mark {
+  outline: 1.5px dashed rgba(164, 141, 255, 0.85);
+  outline-offset: 4px;
+  box-shadow: 0 0 0 6px rgba(139, 112, 236, 0.08), 0 0 32px rgba(139, 112, 236, 0.25);
+}
+
+/* ---------------- typography styles ---------------- */
+.display-1 { font-size: clamp(56px, 8.9vw, 128px); line-height: 1; font-weight: 300; letter-spacing: -0.04em; }
+.display-2 { font-size: clamp(44px, 6.7vw, 96px); line-height: 1; font-weight: 300; letter-spacing: -0.03em; }
+.display-3 { font-size: clamp(36px, 5vw, 72px); line-height: 1; font-weight: 400; letter-spacing: -0.02em; }
+.heading-1 { font-size: clamp(40px, 4.2vw, 60px); line-height: 1; font-weight: 400; letter-spacing: -0.02em; }
+.mono-label { font-family: var(--font-mono); font-size: 12px; line-height: 16px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* ---------------- custom cursor ---------------- */
+@media (pointer: fine) {
+  html.has-light-cursor, html.has-light-cursor * { cursor: none !important; }
+  html.has-light-cursor input, html.has-light-cursor textarea, html.has-light-cursor [contenteditable="true"] { cursor: text !important; }
+}
+
+/* ---------------- utilities ---------------- */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+.thin-scroll { scrollbar-width: thin; scrollbar-color: #3b3b3e transparent; }
+.thin-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.thin-scroll::-webkit-scrollbar-thumb { background: #313131; border-radius: 8px; }
+
+.grain::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 60; opacity: 0.05; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@keyframes aether-pulse { 0%, 100% { opacity: 0.35; transform: scale(0.92); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes aether-shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+@keyframes aether-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes aether-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes aether-dash { to { stroke-dashoffset: 0; } }
+@keyframes aether-spin { to { transform: rotate(360deg); } }
+
+.skeleton {
+  background: linear-gradient(90deg, #1c1c1f 0%, #26262a 40%, #1c1c1f 80%);
+  background-size: 800px 100%;
+  animation: aether-shimmer 1.6s linear infinite;
+}
+.animate-rise { animation: aether-rise 600ms var(--ease-aether) both; }
+.animate-fade { animation: aether-fade 500ms var(--ease-aether) both; }
+
+/* View transition: the floating nav morphs into the workspace sidebar */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 700ms; animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1); }
+::view-transition-group(aether-shell) { animation-duration: 900ms; animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
+}
+html.motion-off *, html.motion-off *::before, html.motion-off *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
