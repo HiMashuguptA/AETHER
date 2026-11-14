@@ -85,7 +85,7 @@ export default function MusePanel({ projectId }: { projectId?: string }) {
     <aside
       aria-label="Muse"
       aria-hidden={!open}
-      className={`glass-strong fixed bottom-3 right-3 top-3 z-50 flex w-[min(384px,calc(100vw-24px))] flex-col rounded-3xl transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${open ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-[110%] opacity-0'}`}
+      className={`glass-strong fixed bottom-3 right-3 top-3 z-50 flex w-[min(384px,calc(100vw-24px))] flex-col rounded-3xl transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] tablet-portrait:left-[88px] tablet-portrait:top-auto tablet-portrait:h-[min(58svh,620px)] tablet-portrait:w-auto ${open ? 'translate-x-0 translate-y-0 opacity-100' : 'pointer-events-none translate-x-[110%] opacity-0 tablet-portrait:translate-x-0 tablet-portrait:translate-y-[110%]'}`}
     >
       <header className="flex items-center justify-between border-b border-hairline px-5 py-4">
         <div className="flex items-center gap-2.5">

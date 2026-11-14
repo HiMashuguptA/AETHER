@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* portrait tablets (iPad mini to iPad Pro 12.9" held upright) get their own canvas layout */
+@custom-variant tablet-portrait (@media (min-width: 768px) and (max-width: 1100px) and (orientation: portrait));
+/* touch screens: bigger targets, controls that would otherwise appear on hover stay visible */
+@custom-variant touch (@media (pointer: coarse));
+
 /* ------------------------------------------------------------------
    ÆTHER design tokens (Stage 01, approved)
    Core colours → semantic roles. Colour is light, not paint:

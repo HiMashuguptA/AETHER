@@ -6,8 +6,12 @@ import PortalOverlay from './components/PortalOverlay';
 import Toaster from './app/components/Toaster';
 import Story from './experience/Story';
 import NotFound from './app/pages/NotFound';
+import { perfEnabled } from './lib/perf';
 
 const Workspace = lazy(() => import('./app/Workspace'));
+// development diagnostics: its code is only downloaded when enabled (dev server or ?perf)
+const PerfOverlay = lazy(() => import('./components/PerfOverlay'));
+const showPerf = perfEnabled();
 
 export default function App() {
   const route = useRoute();
@@ -49,6 +53,11 @@ export default function App() {
       <PortalOverlay />
       <Toaster />
       <LightCursor />
+      {showPerf ? (
+        <Suspense fallback={null}>
+          <PerfOverlay />
+        </Suspense>
+      ) : null}
     </>
   );
 }

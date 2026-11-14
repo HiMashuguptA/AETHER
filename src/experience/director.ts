@@ -29,6 +29,11 @@ export const live = {
   visible: true,
   /** Pulse fired when a CTA is pressed: brightens the Core briefly. */
   flash: 0,
+  /**
+   * Where the hero copy ends on screen (CSS px), so the drop can sit across the end of the
+   * headline at any viewport width and refract it (see headlineLens.ts).
+   */
+  heroText: { headRight: 0, copyRight: 0, width: 0, height: 0 },
 };
 
 export function resetChapters() {

@@ -13,6 +13,7 @@ import { StudioEnvironment } from './StudioEnvironment';
 import { compose, createShot } from './choreography';
 import { live } from '../director';
 import { tierSettings, useQuality, type Tier } from '../../lib/quality';
+import { logPerf, perfEnabled, setRenderer } from '../../lib/perf';
 
 /** Drives the camera from the choreography, with pointer parallax and damping. */
 function Director({ shot }: { shot: ReturnType<typeof createShot> }) {
@@ -52,6 +53,52 @@ function ReadySignal() {
   return null;
 }
 
+/** Development diagnostics: renderer facts for the performance overlay (only mounted with ?perf). */
+function PerfProbe({ dprCap }: { dprCap: number }) {
+  const { gl } = useThree();
+  const last = useRef(0);
+  useEffect(() => {
+    const ctx = gl.getContext();
+    let gpu = '';
+    try {
+      const ext = ctx.getExtension('WEBGL_debug_renderer_info');
+      gpu = String(ext ? ctx.getParameter(ext.UNMASKED_RENDERER_WEBGL) : ctx.getParameter(ctx.RENDERER));
+    } catch { gpu = 'unknown'; }
+    setRenderer({ status: 'running', api: gl.capabilities.isWebGL2 ? 'WebGL 2' : 'WebGL 1', gpu });
+    // count every pass of a frame (post-processing renders several times), not just the last one
+    const auto = gl.info.autoReset;
+    gl.info.autoReset = false;
+    const canvas = gl.domElement;
+    const lost = () => { setRenderer({ status: 'lost' }); logPerf('context', 'WebGL context lost'); };
+    const restored = () => { setRenderer({ status: 'running' }); logPerf('context', 'WebGL context restored'); };
+    canvas.addEventListener('webglcontextlost', lost);
+    canvas.addEventListener('webglcontextrestored', restored);
+    return () => {
+      gl.info.autoReset = auto;
+      canvas.removeEventListener('webglcontextlost', lost);
+      canvas.removeEventListener('webglcontextrestored', restored);
+      setRenderer({ status: 'none' });
+    };
+  }, [gl]);
+  useEffect(() => { setRenderer({ dprCap }); }, [dprCap]);
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    if (t - last.current >= 0.5) {
+      last.current = t;
+      setRenderer({
+        dpr: gl.getPixelRatio(),
+        canvas: [gl.domElement.width, gl.domElement.height],
+        calls: gl.info.render.calls,
+        triangles: gl.info.render.triangles,
+        programs: gl.info.programs?.length ?? 0,
+        textures: gl.info.memory.textures,
+      });
+    }
+    gl.info.reset();
+  });
+  return null;
+}
+
 function Scene({ tier, onSlow }: { tier: Exclude<Tier, 'still'>; onSlow: () => void }) {
   const shot = useMemo(() => createShot(), []);
   const settings = tierSettings[tier];
@@ -68,7 +115,7 @@ function Scene({ tier, onSlow }: { tier: Exclude<Tier, 'still'>; onSlow: () => v
       <Atmosphere target={shot.atmosphere} />
       <Particles count={settings.particles} target={shot.particles} />
       <GlassStack target={shot.stack} onFocus={(i) => { setFocus(i); window.dispatchEvent(new CustomEvent('aether:layer', { detail: i })); }} />
-      <Core target={shot.core} steps={settings.steps} ao={settings.ao} />
+      <Core target={shot.core} steps={settings.steps} ao={settings.ao} lens />
       <PerformanceMonitor
         flipflops={2}
         onDecline={() => (tier === 'full' ? downgrade('Lighter rendering after a slow frame rate') : onSlow())}
@@ -92,6 +139,12 @@ function Scene({ tier, onSlow }: { tier: Exclude<Tier, 'still'>; onSlow: () => v
 export default function Stage({ eventSource, active }: { eventSource: React.RefObject<HTMLElement | null>; active: boolean }) {
   const tier = useQuality((s) => s.tier);
   const [cap, setCap] = useState<number | null>(null);
+  const perfOn = perfEnabled();
+  useEffect(() => {
+    if (!perfOn) return;
+    if (tier === 'still') setRenderer({ status: 'still', dpr: 0, canvas: [0, 0], calls: 0, triangles: 0 });
+    else setRenderer({ status: active ? 'running' : 'paused' });
+  }, [perfOn, tier, active]);
   if (tier === 'still') return null;
   const settings = tierSettings[tier];
   const dpr: [number, number] = [1, cap ?? settings.dpr[1]];
@@ -113,7 +166,15 @@ export default function Stage({ eventSource, active }: { eventSource: React.RefO
         }}
       >
         <Suspense fallback={null}>
-          <Scene tier={tier} onSlow={() => setCap(1)} />
+          <Scene
+            tier={tier}
+            onSlow={() => {
+              if (cap === 1) return;
+              setCap(1);
+              logPerf('dpr', `${tier}: pixel ratio capped at 1 after slow frames`);
+            }}
+          />
+          {perfOn ? <PerfProbe dprCap={dpr[1]} /> : null}
         </Suspense>
       </Canvas>
     </div>

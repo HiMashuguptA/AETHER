@@ -48,6 +48,13 @@ uniform float uFilm;
 uniform float uLiquid;
 uniform float uRough;
 
+// hero headline seen through the drop (see headlineLens.ts); all in drawing-buffer pixels
+uniform float uLensOn;
+uniform vec4 uLens;      // centre xy, radius, feather
+uniform vec4 uTextRect;  // left, bottom, width, height of the headline texture
+uniform sampler2D uText;
+uniform float uTextAmt;
+
 varying vec3 vWorld;
 
 #ifndef MAX_STEPS
@@ -209,6 +216,13 @@ vec3 env(vec3 d) {
   return col;
 }
 
+// coverage of the headline at a screen position, plus its left-to-right tone (white → grey)
+vec2 lensText(vec2 fc) {
+  vec2 uv = (fc - uTextRect.xy) / uTextRect.zw;
+  if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return vec2(0.0, 1.0);
+  return vec2(texture2D(uText, uv).a, uv.x);
+}
+
 void main() {
   vec3 ro = (uInvModel * vec4(cameraPosition, 1.0)).xyz;
   vec3 pw = (uInvModel * vec4(vWorld, 1.0)).xyz;
@@ -254,6 +268,31 @@ void main() {
     float facing = clamp(-dot(nO, normalize(pO)), 0.0, 1.0);
     col += lw * (VIOLET * 1.1 * exp(-dist * 3.2) * (0.1 + facing) + CYAN * 0.25 * exp(-dist * 6.0) * facing);
   }
+  // the hero copy behind the drop, seen through it the way text looks under a drop of water: a
+  // radial pull driven by the liquid surface normal, zero at the centre and at the rim so the words
+  // run unbroken from the page into the drop, swelling in the middle and compressing as they curve
+  // through the edge. Ripples and the hover bulge move the text with the surface. A hint of
+  // dispersion splits the glyph edges.
+  if (uLensOn > 0.5 && uTextAmt > 0.001) {
+    vec2 fc = gl_FragCoord.xy;
+    float inLens = 1.0 - smoothstep(uLens.z - uLens.w, uLens.z, length(fc - uLens.xy));
+    if (inLens > 0.0) {
+      vec3 nV = normalize(mat3(viewMatrix) * nW);
+      float edge = 1.0 - clamp(nV.z, 0.0, 1.0);
+      vec2 q = nV.xy;
+      vec2 off = -q * uLens.z * 0.42 * max(0.0, 1.0 - dot(q, q));
+      vec2 sr = lensText(fc + off * 0.93);
+      vec2 sg = lensText(fc + off);
+      vec2 sb = lensText(fc + off * 1.08);
+      vec3 cov = vec3(sr.x, sg.x, sb.x);
+      float tone = mix(1.0, 0.45, clamp(sg.y, 0.0, 1.0));
+      float w = inLens * uTextAmt * (1.0 - 0.25 * edge * edge);
+      float a = max(cov.r, max(cov.g, cov.b)) * w;
+      vec3 ink = cov * tone * vec3(1.0, 0.985, 1.04) * 1.15;
+      col = col * (1.0 - 0.7 * a) + ink * w;
+    }
+  }
+
   // spark and universe: the object is mostly light
   col = mix(col, vec3(1.0, 0.97, 1.05) * 3.0, uGlow * (0.4 + 0.6 * cosv));
 

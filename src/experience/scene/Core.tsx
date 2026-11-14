@@ -3,6 +3,7 @@ import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { coreFragment, coreVertex } from './coreShader';
 import { setCursor } from '../../components/cursorBus';
+import { lensAllowed, releaseLens, updateLens, type LensUniforms } from '../headlineLens';
 
 /** Target values the Core eases toward. Mutated by the choreography or by app controls. */
 export interface CoreTarget {
@@ -30,6 +31,8 @@ interface CoreProps {
   interactive?: boolean;
   /** Damping speed; higher reacts faster. */
   lambda?: number;
+  /** Refract the hero headline through the drop (story canvas only). */
+  lens?: boolean;
 }
 
 const damp = THREE.MathUtils.damp;
@@ -47,10 +50,12 @@ function boundFor(morph: number, split: number) {
   return Math.max(base, split > 0.01 ? 2.15 : 0);
 }
 
-export function Core({ target, steps, ao, interactive = true, lambda = 3.2 }: CoreProps) {
+export function Core({ target, steps, ao, interactive = true, lambda = 3.2, lens = false }: CoreProps) {
   const group = useRef<THREE.Group>(null!);
   const mesh = useRef<THREE.Mesh>(null!);
   const { invalidate } = useThree();
+  const lensOk = useMemo(() => lens && lensAllowed().ok, [lens]);
+  const centre = useMemo(() => new THREE.Vector3(), []);
 
   const material = useMemo(
     () =>
@@ -81,12 +86,20 @@ export function Core({ target, steps, ao, interactive = true, lambda = 3.2 }: Co
           uFilm: { value: 1 },
           uLiquid: { value: 1 },
           uRough: { value: 0 },
+          uLensOn: { value: 0 },
+          uLens: { value: new THREE.Vector4() },
+          uTextRect: { value: new THREE.Vector4(0, 0, 1, 1) },
+          uText: { value: null },
+          uTextAmt: { value: 0 },
         },
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [steps, ao],
   );
-  useEffect(() => () => material.dispose(), [material]);
+  useEffect(() => () => {
+    if (lens) releaseLens(material.uniforms as unknown as LensUniforms);
+    material.dispose();
+  }, [material, lens]);
 
   // current (damped) values
   const cur = useRef({ ...target, hover: 0 });
@@ -149,6 +162,10 @@ export function Core({ target, steps, ao, interactive = true, lambda = 3.2 }: Co
     mesh.current.scale.setScalar(b / 2.35);
     (u.uModel.value as THREE.Matrix4).copy(g.matrixWorld);
     (u.uInvModel.value as THREE.Matrix4).copy(g.matrixWorld).invert();
+    if (lens) {
+      centre.setFromMatrixPosition(g.matrixWorld);
+      updateLens(u as unknown as LensUniforms, state.camera, centre, Math.max(0.0001, c.scale), state.size, state.viewport.dpr, lensOk);
+    }
     invalidate();
   });
 

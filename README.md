@@ -22,6 +22,8 @@ Node 20+ recommended. `dist/` uses relative paths (`base: './'`), so it can be s
 | Flag | Effect |
 | --- | --- |
 | `?tier=full` / `?tier=lite` / `?tier=still` | Force a quality tier (otherwise auto-detected) |
+| `?perf` | Show the performance overlay on any build (see below). `?perf=0` hides it under `npm run dev` |
+| `?nolens` | Turn off the headline refraction (the hero copy stays plain DOM text) |
 | `?nocap` | Remove the frame-delta cap (only useful in automated tests on software renderers) |
 
 The tier can also be changed from the **Motion** menu in the top navigation; that choice is kept in `localStorage`.
@@ -30,7 +32,22 @@ The tier can also be changed from the **Motion** menu in the top navigation; tha
 
 - `Ctrl/⌘ K` command palette (workspace)
 - `Ctrl/⌘ J` open or close Muse
+- `Alt+Shift+P` hide or show the performance overlay (when it is enabled)
 - Any key, click or scroll skips the preloader
+
+### Performance overlay (development only)
+
+On by default under `npm run dev`; in production builds it is off and its code is not downloaded
+unless the URL has `?perf`. It shows:
+
+- FPS from the page's own animation frames, average and worst frame time, a 30 s sparkline
+- Active tier (Full / Lite / Still), whether it was chosen or automatic, and why
+- Canvas pixel ratio, screen pixel ratio and the tier's cap
+- Renderer status (rendering, paused when the story is hidden, still mode, context lost), canvas size, draw calls, GPU string
+- Headline refraction status
+- Events: start tier, automatic downgrades (Full → Lite, Lite pixel ratio capped at 1), Motion menu changes, WebGL context loss
+
+Events are also written to the console as `[ÆTHER perf] …` while the overlay is enabled.
 
 ## Routes (hash based)
 
@@ -52,6 +69,7 @@ src/
   experience/            story site
     Story.tsx            preloader, nav, chapter rail, sections, one persistent canvas
     director.ts          shared chapter progress (0–1) written by ScrollTrigger
+    headlineLens.ts      hero copy refracted through the drop (DOM mask + shader hand-over)
     useChapter.ts        binds a section's scroll range to a chapter value
     sections/            Hero, Tagline, Evolution, Showcase, Architecture, Platform, Portal, Launch
     scene/
@@ -74,6 +92,7 @@ src/
     types.ts             domain types
   lib/
     quality.ts           Full / Lite / Still detection and overrides
+    perf.ts              diagnostics event log and renderer facts (overlay in components/PerfOverlay.tsx)
     router.ts            hash router with View Transitions
     scroll.ts            Lenis + GSAP ticker wiring
   components/reactbits/  Magnet, SpotlightCard (adapted from React Bits; licence notice in file)
@@ -100,8 +119,34 @@ A running PerformanceMonitor downgrades Full → Lite, then caps Lite's DPR at 1
 | Sign-in | Nav button only, no auth | — |
 | Email in setup | Format validation only | — |
 
+### Headline refraction
+
+The hero headline (and the intro lines under it) stays real DOM text: selectable, read by screen
+readers, indexed. Where the drop overlaps it, a circular CSS mask hides those glyphs and the Core's
+shader draws the same words bent by the drop's surface normals, using a texture painted from the
+browser's own word positions. Mask and shader share one circle, so the hand-over is seamless. The
+drop is placed from the measured end of the headline, so it crosses the last letters at any width.
+Off in Still mode, with `prefers-contrast: more`, forced colours, or `?nolens`.
+
+### Portrait tablets
+
+Between 768 and 1100 px wide in portrait, the project canvas uses the full width with a resizable
+panel sheet underneath (Properties, Layers, Comments, Muse, and Timeline in Motion mode). Muse rises
+from the bottom so proposals stay previewed on the canvas above. Touch screens get larger targets,
+and controls that would otherwise appear on hover stay visible.
+
+## Security and privacy
+
+- No API keys, tokens, credentials or environment variables are used or needed. `.env*` files are
+  git-ignored in case integrations are added later; keep secrets in the hosting provider's settings.
+- No analytics, cookies or third-party requests. Fonts, images and the 3D environment ship with
+  the app. `localStorage` holds only the visitor's Motion tier choice and `sessionStorage` only a
+  "preloader already seen" flag.
+- All people, clients and projects in `src/data/seed.ts` are fictional.
+- Third-party licences and attributions: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+- No licence has been chosen for this repository yet, so default copyright applies.
+
 ## Known limits
 
-- Performance was measured only in software rendering (SwiftShader) during development. Real-GPU frame rates still need checking on the target devices.
-- On tablet portrait the project canvas artboard is small; usable but not tuned.
-- The Stage 01 "refraction through the Core" idea for the headline is not implemented; the headline stays crisp DOM text beside the Core.
+- Frame rates were measured in software rendering during development; use `?perf` to check real devices.
+- The Motion editor uses the Web Animations API, not GSAP (see the GSAP note in THIRD_PARTY_NOTICES.md).

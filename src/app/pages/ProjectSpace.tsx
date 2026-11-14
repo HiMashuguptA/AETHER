@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Sparkle, RocketLaunch, PaintBrush, FilmStrip, Cube, Eye, EyeSlash, Lock, LockOpen, Play, Pause,
-  Desktop, DeviceTablet, DeviceMobile, ChatCircle, Stack, TextAa, Cursor, Image as ImageIcon, Rows, Square, ArrowCounterClockwise, CheckCircle,
+  Desktop, DeviceTablet, DeviceMobile, ChatCircle, Stack, TextAa, Cursor, Image as ImageIcon, Rows, Square, ArrowCounterClockwise, CheckCircle, Sliders,
 } from '@phosphor-icons/react';
 import { useApp } from '../../data/store';
 import { navigate } from '../../lib/router';
@@ -15,6 +15,23 @@ import { STAGES, STAGE_LABEL, type Stage } from '../../lib/tokens';
 import { stageImage } from '../../data/assets';
 
 type Mode = 'design' | 'motion' | 'space';
+type SheetTab = 'timeline' | 'properties' | 'layers' | 'comments' | 'muse';
+
+/** Portrait tablets, iPad mini to iPad Pro 12.9" held upright (matches the tablet-portrait CSS variant). */
+const TABLET_PORTRAIT = '(min-width: 768px) and (max-width: 1100px) and (orientation: portrait)';
+
+function useMedia(query: string) {
+  const [match, setMatch] = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia?.(query);
+    if (!mq) return;
+    const on = () => setMatch(mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  }, [query]);
+  return match;
+}
 
 const LAYERS: { id: LayerId; label: string; icon: React.ReactNode }[] = [
   { id: 'background', label: 'Background', icon: <Square size={14} /> },
@@ -65,7 +82,7 @@ function Chips<T extends string | number>({ value, options, onChange, render, la
   return (
     <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1.5">
       {options.map((o) => (
-        <button key={String(o)} role="radio" aria-checked={value === o} onClick={() => onChange(o)} className={`h-8 min-w-8 rounded-lg border px-2 font-mono text-xs transition-colors ${value === o ? 'border-violet-400/70 bg-violet-500/10 text-mist' : 'border-hairline text-text-3 hover:text-mist'}`}>
+        <button key={String(o)} role="radio" aria-checked={value === o} onClick={() => onChange(o)} className={`h-8 min-w-8 rounded-lg border px-2 font-mono text-xs transition-colors touch:h-10 touch:min-w-10 ${value === o ? 'border-violet-400/70 bg-violet-500/10 text-mist' : 'border-hairline text-text-3 hover:text-mist'}`}>
           {render ? render(o) : String(o)}
         </button>
       ))}
@@ -227,17 +244,17 @@ function Timeline({ p, selected, onSelect, time, setTime, playing, setPlaying }:
       <div className="flex items-center gap-3">
         <Button size="sm" variant="secondary" icon={playing ? <Pause size={14} weight="fill" /> : <Play size={14} weight="fill" />} onClick={() => setPlaying(!playing)}>{playing ? 'Pause' : 'Play'}</Button>
         <span className="font-mono text-xs tabular-nums text-text-2">{time.toFixed(2)} s / {TOTAL.toFixed(2)} s</span>
-        <span className="text-xs text-text-4">Drag a bar to move it, its edge to change duration, the ruler to scrub</span>
+        <span className="hidden text-xs text-text-4 sm:inline">Drag a bar to move it, its edge to change duration, the ruler to scrub</span>
       </div>
       <div className="mt-3 flex gap-3">
-        <div className="w-[140px] shrink-0">
-          <div className="h-6" />
+        <div className="w-[140px] shrink-0 tablet-portrait:w-[112px]">
+          <div className="h-6 touch:h-8" />
           {p.motion.map((t) => (
-            <button key={t.id} onClick={() => onSelect(t.id)} className={`block h-8 w-full truncate border-t border-hairline text-left text-xs ${selected === t.id ? 'text-mist' : 'text-text-3'}`}>{t.label}</button>
+            <button key={t.id} onClick={() => onSelect(t.id)} className={`block h-8 w-full truncate border-t border-hairline text-left text-xs touch:h-11 ${selected === t.id ? 'text-mist' : 'text-text-3'}`}>{t.label}</button>
           ))}
         </div>
         <div className="relative flex-1">
-          <div ref={area} className="relative h-6 cursor-ew-resize select-none" onPointerDown={scrub} aria-label="Timeline ruler">
+          <div ref={area} className="relative h-6 cursor-ew-resize touch-none select-none touch:h-8" onPointerDown={scrub} aria-label="Timeline ruler">
             {Array.from({ length: 13 }, (_, i) => (
               <span key={i} className="absolute bottom-0 flex flex-col items-center" style={{ left: `${(i / 12) * 100}%` }}>
                 {i % 4 === 0 && <span className="mb-0.5 -translate-x-1/2 font-mono text-[10px] text-text-4">{(i * 0.25).toFixed(1)}</span>}
@@ -246,9 +263,9 @@ function Timeline({ p, selected, onSelect, time, setTime, playing, setPlaying }:
             ))}
           </div>
           {p.motion.map((t) => (
-            <div key={t.id} className="relative h-8 border-t border-hairline">
+            <div key={t.id} className="relative h-8 border-t border-hairline touch:h-11">
               <div
-                className={`absolute top-1.5 flex h-5 cursor-grab items-center rounded-md border text-[10px] active:cursor-grabbing ${selected === t.id ? 'border-violet-400 bg-violet-500/40' : 'border-violet-400/30 bg-violet-500/15'}`}
+                className={`absolute top-1.5 flex h-5 cursor-grab touch-none items-center rounded-md border text-[10px] active:cursor-grabbing touch:top-2 touch:h-7 ${selected === t.id ? 'border-violet-400 bg-violet-500/40' : 'border-violet-400/30 bg-violet-500/15'}`}
                 style={{ left: `${(t.start / TOTAL) * 100}%`, width: `${(t.duration / TOTAL) * 100}%` }}
                 onPointerDown={(e) => drag(e, t, 'move')}
                 role="slider"
@@ -264,7 +281,7 @@ function Timeline({ p, selected, onSelect, time, setTime, playing, setPlaying }:
                 }}
               >
                 <span className="truncate px-1.5 font-mono text-mist/80">{t.easing}</span>
-                <span className="absolute -right-1 top-0 h-full w-2.5 cursor-ew-resize rounded-r-md" onPointerDown={(e) => drag(e, t, 'end')} aria-hidden="true" />
+                <span className="absolute -right-1 top-0 h-full w-2.5 cursor-ew-resize rounded-r-md touch:-right-3 touch:w-6" onPointerDown={(e) => drag(e, t, 'end')} aria-hidden="true" />
               </div>
             </div>
           ))}
@@ -333,6 +350,33 @@ export default function ProjectSpace({ id }: { id: string }) {
   const [playing, setPlaying] = useState(false);
   const [comment, setComment] = useState('');
   const [mobile, setMobile] = useState(() => window.innerWidth < 768);
+  const tabletPortrait = useMedia(TABLET_PORTRAIT);
+  const [sheetTab, setSheetTab] = useState<SheetTab>('properties');
+  const [sheet, setSheet] = useState(46); // % of the area under the header
+  const stack = useRef<HTMLDivElement>(null);
+
+  // drag the sheet's handle to resize it; a tap steps through the sizes
+  const startSheetDrag = (e: React.PointerEvent) => {
+    const el = stack.current;
+    if (!el) return;
+    const h = el.getBoundingClientRect().height || 1;
+    const y0 = e.clientY;
+    const s0 = sheet;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      const dy = ev.clientY - y0;
+      if (Math.abs(dy) > 4) moved = true;
+      setSheet(Math.min(74, Math.max(28, s0 - (dy / h) * 100)));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (!moved) setSheet((v) => (v < 40 ? 46 : v < 60 ? 70 : 32));
+      else setSheet((v) => [32, 46, 70].reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a)));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
 
   useEffect(() => { touch(id); }, [id, touch]);
   useEffect(() => {
@@ -366,129 +410,218 @@ export default function ProjectSpace({ id }: { id: string }) {
   const marked: Partial<Record<LayerId, boolean>> = comparing ? {} : Object.fromEntries(pending.filter((x) => x.change.scope === 'doc' || x.change.scope === 'motion').map((x) => [x.change.scope === 'motion' ? (x.change as { track: LayerId }).track : x.target, true]));
   const showMotion = mode === 'motion';
   const previewProject = { ...project, doc: view.doc, motion: view.motion, space: view.space };
+  const layerLabel = LAYERS.find((l) => l.id === layer)?.label;
+
+  const changeMode = (m: Mode) => {
+    setMode(m);
+    if (m === 'motion') { setTime(0); setPlaying(true); }
+    setSheetTab(m === 'motion' ? 'timeline' : 'properties');
+  };
+  const selectFromCanvas = (l: LayerId) => {
+    setLayer(l);
+    if (sheetTab === 'layers') setSheetTab('properties');
+  };
+  const reviewMuse = () => (tabletPortrait ? (setSheetTab('muse'), setSheet((v) => Math.max(v, 48))) : setMuse(true));
+
+  // ---------- shared pieces (desktop panels and the portrait-tablet sheet use the same parts) ----------
+  const header = (
+    <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-hairline px-4">
+      <div className="flex min-w-0 items-center gap-3">
+        <button onClick={() => navigate('projects', { transition: false })} aria-label="Back to projects" className="flex h-9 w-9 items-center justify-center rounded-full text-text-3 hover:bg-white/[0.06] hover:text-mist touch:h-11 touch:w-11"><ArrowLeft size={16} /></button>
+        <div className="min-w-0 max-w-[220px] lg:max-w-[320px]">
+          <p className="truncate text-sm text-mist">{project.name}</p>
+          <p className="hidden truncate text-xs text-text-4 lg:block tablet-portrait:hidden">{project.client}</p>
+        </div>
+        <span className="hidden lg:inline-flex tablet-portrait:hidden"><StageBadge stage={project.stage} /></span>
+      </div>
+      <Segmented<Mode>
+        label="Canvas mode"
+        value={mode}
+        onChange={changeMode}
+        options={[
+          { id: 'design', label: 'Design', icon: <PaintBrush size={14} /> },
+          { id: 'motion', label: 'Motion', icon: <FilmStrip size={14} /> },
+          { id: 'space', label: 'Space', icon: <Cube size={14} /> },
+        ]}
+      />
+      <div className="flex items-center gap-2">
+        <span className="hidden items-center gap-2 lg:flex tablet-portrait:hidden"><AvatarStack ids={project.teamIds} size={26} /><span className="flex items-center gap-1 text-xs text-text-4"><span className="h-1.5 w-1.5 rounded-full bg-cyan-500" />{project.teamIds.length > 1 ? `${personById(project.teamIds[1]).name.split(' ')[0]} is here` : 'Only you'}</span></span>
+        <Button size="sm" variant={museOpen ? 'muse' : 'secondary'} icon={<Sparkle size={14} weight="fill" className={museOpen ? '' : 'text-violet-400'} />} onClick={() => setMuse(!museOpen)}>
+          Muse{pending.length ? ` · ${pending.length}` : ''}
+        </Button>
+        <Button size="sm" variant="primary" icon={<RocketLaunch size={14} />} onClick={() => navigate(`launch-${project.id}`, { transition: false })}>Launch</Button>
+      </div>
+    </header>
+  );
+
+  const layersList = (
+    <ul className="thin-scroll flex-1 overflow-y-auto px-2 pb-3 tablet-portrait:grid tablet-portrait:grid-cols-2 tablet-portrait:gap-x-3 tablet-portrait:px-0">
+      {LAYERS.map((l) => (
+        <li key={l.id} className={`group flex items-center gap-2 rounded-lg px-2 ${layer === l.id ? 'bg-white/[0.07]' : 'hover:bg-white/[0.03]'}`}>
+          <button className={`flex h-9 flex-1 items-center gap-2 text-left text-sm touch:h-11 ${layer === l.id ? 'text-mist' : 'text-text-2'}`} onClick={() => setLayer(l.id)} aria-pressed={layer === l.id}>
+            <span className="text-text-3">{l.icon}</span>{l.label}
+            {marked[l.id] && <Sparkle size={12} weight="fill" className="text-violet-400" aria-label="Muse proposal pending" />}
+          </button>
+          {l.id !== 'background' && (
+            <>
+              <button aria-label={view.doc.hidden[l.id] ? `Show ${l.label}` : `Hide ${l.label}`} onClick={() => updateDoc(project.id, { hidden: { ...project.doc.hidden, [l.id]: !project.doc.hidden[l.id] } })} className="flex items-center justify-center text-text-4 opacity-0 hover:text-mist focus-visible:opacity-100 group-hover:opacity-100 touch:h-11 touch:w-9 touch:opacity-100">{project.doc.hidden[l.id] ? <EyeSlash size={14} /> : <Eye size={14} />}</button>
+              <button aria-label={project.doc.locked[l.id] ? `Unlock ${l.label}` : `Lock ${l.label}`} onClick={() => updateDoc(project.id, { locked: { ...project.doc.locked, [l.id]: !project.doc.locked[l.id] } })} className={`flex items-center justify-center ${project.doc.locked[l.id] ? 'text-text-2 opacity-100' : 'text-text-4 opacity-0'} hover:text-mist focus-visible:opacity-100 group-hover:opacity-100 touch:h-11 touch:w-9 touch:opacity-100`}>{project.doc.locked[l.id] ? <Lock size={14} /> : <LockOpen size={14} />}</button>
+            </>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+
+  const commentsPanel = (
+    <div className="thin-scroll flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 tablet-portrait:px-0">
+      {project.comments.length === 0 && <p className="px-1 py-6 text-center text-xs text-text-4">No comments yet. Select a layer and leave the first one.</p>}
+      {project.comments.map((c) => (
+        <div key={c.id} className={`rounded-xl border p-2.5 ${c.resolved ? 'border-hairline opacity-50' : 'border-hairline-strong'}`}>
+          <div className="flex items-center gap-2"><Avatar id={c.authorId} size={20} /><span className="text-xs text-text-2">{personById(c.authorId).name.split(' ')[0]}</span><span className="ml-auto text-[11px] text-text-4">{timeAgo(c.at)}</span></div>
+          <p className="mt-1.5 text-sm text-mist">{c.text}</p>
+          <div className="mt-1.5 flex items-center justify-between">
+            <button onClick={() => setLayer(c.target)} className="font-mono text-[11px] text-violet-300 touch:py-2">@{c.target}</button>
+            {!c.resolved && <button onClick={() => resolve(project.id, c.id)} className="flex items-center gap-1 text-[11px] text-text-3 hover:text-mist touch:py-2"><CheckCircle size={12} />Resolve</button>}
+          </div>
+        </div>
+      ))}
+      <form onSubmit={(e) => { e.preventDefault(); if (comment.trim()) { addComment(project.id, comment.trim(), layer); setComment(''); } }} className="mt-1 flex flex-col gap-2">
+        <label htmlFor="comment" className="text-xs text-text-4">Comment on {layerLabel?.toLowerCase()}</label>
+        <textarea id="comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={2} className="resize-none rounded-lg border border-hairline bg-black/40 p-2 text-sm text-mist focus:border-violet-400/60 focus:outline-none" />
+        <Button size="sm" type="submit" variant="secondary" disabled={!comment.trim()}>Post comment</Button>
+      </form>
+    </div>
+  );
+
+  const inspectorBody = (
+    <>
+      {mode === 'design' && <DesignInspector p={project} layer={layer} />}
+      {mode === 'motion' && <MotionInspector p={project} layer={layer} />}
+      {mode === 'space' && <SpaceInspector p={project} />}
+    </>
+  );
+  const inspectorTitle = mode === 'space' ? 'Space · material and light' : mode === 'motion' ? `Motion · ${layerLabel}` : layerLabel;
+
+  const canvasArea =
+    mode === 'space' ? (
+      <CoreViewport morph={view.space.morph} space={view.space} className="flex-1" label={`${project.name} Core in real time. Drag to orbit.`} />
+    ) : (
+      <div className="relative flex-1 overflow-hidden" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px)', backgroundSize: '22px 22px' }} onClick={() => setLayer('background')}>
+        <div className="absolute inset-0 flex items-center justify-center p-8 tablet-portrait:px-5 tablet-portrait:pb-[72px] tablet-portrait:pt-14">
+          <div className={`h-full ${device === 'mobile' ? 'w-[min(300px,100%)]' : device === 'tablet' ? 'w-[min(560px,100%)]' : 'w-full max-w-[1100px]'}`}>
+            <Artboard
+              doc={view.doc}
+              name={project.client}
+              device={device}
+              motion={showMotion ? view.motion : undefined}
+              playToken={showMotion ? playToken : undefined}
+              scrubTime={showMotion ? time : null}
+              selected={layer}
+              onSelect={selectFromCanvas}
+              marked={marked}
+              interactive
+              fit="contain"
+              className="rounded-xl shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)]"
+            />
+          </div>
+        </div>
+        {pending.length > 0 && (
+          <div className="glass absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-full py-1.5 pl-4 pr-1.5 text-sm" onClick={(e) => e.stopPropagation()}>
+            <Sparkle size={14} weight="fill" className="text-violet-400" />
+            <span className="whitespace-nowrap text-text-2">{comparing ? 'Showing your version' : `Previewing ${pending.length} Muse proposal${pending.length > 1 ? 's' : ''}`}</span>
+            <Button size="sm" variant="muse" onClick={reviewMuse}>Review</Button>
+          </div>
+        )}
+        <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <Segmented<Device> label="Device" value={device} onChange={setDevice} options={[{ id: 'desktop', label: 'Desktop', icon: <Desktop size={14} /> }, { id: 'tablet', label: 'Tablet', icon: <DeviceTablet size={14} /> }, { id: 'mobile', label: 'Phone', icon: <DeviceMobile size={14} /> }]} />
+          {mode === 'design' && <Button size="sm" variant="secondary" icon={<ArrowCounterClockwise size={14} />} onClick={() => { changeMode('motion'); setPlayToken((v) => v + 1); }}>Play intro</Button>}
+        </div>
+      </div>
+    );
+
+  // ---------- portrait tablet: canvas on top, a resizable panel sheet below ----------
+  if (tabletPortrait) {
+    const tabs: { id: SheetTab; label: string; icon: React.ReactNode }[] = [];
+    if (mode === 'motion') tabs.push({ id: 'timeline', label: 'Timeline', icon: <FilmStrip size={14} /> });
+    tabs.push({ id: 'properties', label: mode === 'space' ? 'Material' : 'Properties', icon: <Sliders size={14} /> });
+    if (mode !== 'space') tabs.push({ id: 'layers', label: 'Layers', icon: <Stack size={14} /> });
+    tabs.push({ id: 'comments', label: 'Comments', icon: <ChatCircle size={14} /> });
+    tabs.push({ id: 'muse', label: pending.length ? `Muse · ${pending.length}` : 'Muse', icon: <Sparkle size={14} weight="fill" /> });
+    const tab = tabs.some((t) => t.id === sheetTab) ? sheetTab : tabs[0].id;
+
+    return (
+      <div className="flex h-[100svh] flex-col">
+        {header}
+        <div ref={stack} className="flex min-h-0 flex-1 flex-col">
+          <section className="relative flex min-h-0 flex-col" style={{ height: `${100 - sheet}%` }} aria-label="Canvas">
+            {canvasArea}
+          </section>
+          <section className="flex min-h-0 flex-col border-t border-hairline-strong bg-[#0c0c0e]" style={{ height: `${sheet}%` }} aria-label="Canvas panels">
+            <button
+              type="button"
+              className="mx-auto flex h-6 w-24 shrink-0 touch-none items-center justify-center"
+              aria-label={`Resize panels, ${Math.round(sheet)}% of the screen. Tap to change size.`}
+              onPointerDown={startSheetDrag}
+              onKeyDown={(e) => { if (e.key === 'ArrowUp') setSheet((v) => Math.min(72, v + 6)); if (e.key === 'ArrowDown') setSheet((v) => Math.max(30, v - 6)); }}
+            >
+              <span className="h-1 w-10 rounded-full bg-hairline-strong" />
+            </button>
+            <div className="flex shrink-0 items-center gap-3 px-4 pb-3">
+              <Segmented<SheetTab> label="Panel" value={tab} onChange={setSheetTab} options={tabs} />
+              {tab === 'properties' && <p className="mono-label ml-auto truncate text-text-4">{inspectorTitle}</p>}
+            </div>
+            <div className={`thin-scroll min-h-0 flex-1 overflow-y-auto ${tab === 'timeline' ? '' : 'px-4 pb-6'}`}>
+              {tab === 'timeline' && (
+                <>
+                  <Timeline p={previewProject} selected={layer} onSelect={setLayer} time={time} setTime={setTime} playing={playing} setPlaying={setPlaying} />
+                  <div className="px-4 pb-6 pt-2">
+                    <p className="mono-label mb-4 text-text-4">{inspectorTitle}</p>
+                    <div className="[&>div]:grid [&>div]:grid-cols-2 [&>div]:gap-x-8 [&>div]:gap-y-5">{inspectorBody}</div>
+                  </div>
+                </>
+              )}
+              {tab === 'properties' && <div className="[&>div]:grid [&>div]:grid-cols-2 [&>div]:gap-x-8 [&>div]:gap-y-5">{inspectorBody}</div>}
+              {tab === 'layers' && layersList}
+              {tab === 'comments' && commentsPanel}
+              {tab === 'muse' && (
+                <div className="flex flex-col gap-3">
+                  {pending.length ? (
+                    <div className="grid grid-cols-2 gap-3">{pending.map((pr) => <ProposalCard key={pr.id} p={pr} compact />)}</div>
+                  ) : (
+                    <p className="text-sm text-text-3">No proposals waiting. Ask Muse and its suggestions appear here, previewed on the canvas above until you accept or reject them.</p>
+                  )}
+                  <Button variant="secondary" className="self-start" icon={<Sparkle size={14} weight="fill" className="text-violet-400" />} onClick={() => setMuse(true)}>Ask Muse</Button>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-[100svh] flex-col">
-      {/* top bar */}
-      <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-hairline px-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <button onClick={() => navigate('projects', { transition: false })} aria-label="Back to projects" className="flex h-9 w-9 items-center justify-center rounded-full text-text-3 hover:bg-white/[0.06] hover:text-mist"><ArrowLeft size={16} /></button>
-          <div className="min-w-0 max-w-[220px] lg:max-w-[320px]">
-            <p className="truncate text-sm text-mist">{project.name}</p>
-            <p className="hidden truncate text-xs text-text-4 lg:block">{project.client}</p>
-          </div>
-          <span className="hidden lg:inline-flex"><StageBadge stage={project.stage} /></span>
-        </div>
-        <Segmented<Mode>
-          label="Canvas mode"
-          value={mode}
-          onChange={(m) => { setMode(m); if (m === 'motion') { setTime(0); setPlaying(true); } }}
-          options={[
-            { id: 'design', label: 'Design', icon: <PaintBrush size={14} /> },
-            { id: 'motion', label: 'Motion', icon: <FilmStrip size={14} /> },
-            { id: 'space', label: 'Space', icon: <Cube size={14} /> },
-          ]}
-        />
-        <div className="flex items-center gap-2">
-          <span className="hidden items-center gap-2 lg:flex"><AvatarStack ids={project.teamIds} size={26} /><span className="flex items-center gap-1 text-xs text-text-4"><span className="h-1.5 w-1.5 rounded-full bg-cyan-500" />{project.teamIds.length > 1 ? `${personById(project.teamIds[1]).name.split(' ')[0]} is here` : 'Only you'}</span></span>
-          <Button size="sm" variant={museOpen ? 'muse' : 'secondary'} icon={<Sparkle size={14} weight="fill" className={museOpen ? '' : 'text-violet-400'} />} onClick={() => setMuse(!museOpen)}>
-            Muse{pending.length ? ` · ${pending.length}` : ''}
-          </Button>
-          <Button size="sm" variant="primary" icon={<RocketLaunch size={14} />} onClick={() => navigate(`launch-${project.id}`, { transition: false })}>Launch</Button>
-        </div>
-      </header>
+      {header}
 
       <div className="flex min-h-0 flex-1">
         {/* left panel */}
         <aside className="hidden w-[232px] shrink-0 flex-col border-r border-hairline lg:flex" aria-label="Layers and comments">
           <div className="p-3"><Segmented label="Panel" value={panel} onChange={setPanel} options={[{ id: 'layers', label: 'Layers', icon: <Stack size={14} /> }, { id: 'comments', label: `Comments`, icon: <ChatCircle size={14} /> }]} /></div>
-          {panel === 'layers' ? (
-            <ul className="thin-scroll flex-1 overflow-y-auto px-2 pb-3">
-              {LAYERS.map((l) => (
-                <li key={l.id} className={`group flex items-center gap-2 rounded-lg px-2 ${layer === l.id ? 'bg-white/[0.07]' : 'hover:bg-white/[0.03]'}`}>
-                  <button className={`flex h-9 flex-1 items-center gap-2 text-left text-sm ${layer === l.id ? 'text-mist' : 'text-text-2'}`} onClick={() => setLayer(l.id)} aria-pressed={layer === l.id}>
-                    <span className="text-text-3">{l.icon}</span>{l.label}
-                    {marked[l.id] && <Sparkle size={12} weight="fill" className="text-violet-400" aria-label="Muse proposal pending" />}
-                  </button>
-                  {l.id !== 'background' && (
-                    <>
-                      <button aria-label={view.doc.hidden[l.id] ? `Show ${l.label}` : `Hide ${l.label}`} onClick={() => updateDoc(project.id, { hidden: { ...project.doc.hidden, [l.id]: !project.doc.hidden[l.id] } })} className="text-text-4 opacity-0 hover:text-mist focus-visible:opacity-100 group-hover:opacity-100">{project.doc.hidden[l.id] ? <EyeSlash size={14} /> : <Eye size={14} />}</button>
-                      <button aria-label={project.doc.locked[l.id] ? `Unlock ${l.label}` : `Lock ${l.label}`} onClick={() => updateDoc(project.id, { locked: { ...project.doc.locked, [l.id]: !project.doc.locked[l.id] } })} className={`${project.doc.locked[l.id] ? 'text-text-2 opacity-100' : 'text-text-4 opacity-0'} hover:text-mist focus-visible:opacity-100 group-hover:opacity-100`}>{project.doc.locked[l.id] ? <Lock size={14} /> : <LockOpen size={14} />}</button>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="thin-scroll flex flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3">
-              {project.comments.length === 0 && <p className="px-1 py-6 text-center text-xs text-text-4">No comments yet. Select a layer and leave the first one.</p>}
-              {project.comments.map((c) => (
-                <div key={c.id} className={`rounded-xl border p-2.5 ${c.resolved ? 'border-hairline opacity-50' : 'border-hairline-strong'}`}>
-                  <div className="flex items-center gap-2"><Avatar id={c.authorId} size={20} /><span className="text-xs text-text-2">{personById(c.authorId).name.split(' ')[0]}</span><span className="ml-auto text-[11px] text-text-4">{timeAgo(c.at)}</span></div>
-                  <p className="mt-1.5 text-sm text-mist">{c.text}</p>
-                  <div className="mt-1.5 flex items-center justify-between">
-                    <button onClick={() => setLayer(c.target)} className="font-mono text-[11px] text-violet-300">@{c.target}</button>
-                    {!c.resolved && <button onClick={() => resolve(project.id, c.id)} className="flex items-center gap-1 text-[11px] text-text-3 hover:text-mist"><CheckCircle size={12} />Resolve</button>}
-                  </div>
-                </div>
-              ))}
-              <form onSubmit={(e) => { e.preventDefault(); if (comment.trim()) { addComment(project.id, comment.trim(), layer); setComment(''); } }} className="mt-1 flex flex-col gap-2">
-                <label htmlFor="comment" className="text-xs text-text-4">Comment on {LAYERS.find((l) => l.id === layer)?.label.toLowerCase()}</label>
-                <textarea id="comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={2} className="resize-none rounded-lg border border-hairline bg-black/40 p-2 text-sm text-mist focus:border-violet-400/60 focus:outline-none" />
-                <Button size="sm" type="submit" variant="secondary" disabled={!comment.trim()}>Post comment</Button>
-              </form>
-            </div>
-          )}
+          {panel === 'layers' ? layersList : commentsPanel}
         </aside>
 
         {/* canvas */}
         <section className="relative flex min-w-0 flex-1 flex-col" aria-label="Canvas">
-          {mode === 'space' ? (
-            <CoreViewport morph={view.space.morph} space={view.space} className="flex-1" label={`${project.name} Core in real time. Drag to orbit.`} />
-          ) : (
-            <div className="relative flex-1 overflow-hidden" style={{ backgroundImage: 'radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px)', backgroundSize: '22px 22px' }} onClick={() => setLayer('background')}>
-              <div className="absolute inset-0 flex items-center justify-center p-8">
-                <div className={`h-full ${device === 'mobile' ? 'w-[min(300px,100%)]' : device === 'tablet' ? 'w-[min(560px,100%)]' : 'w-full max-w-[1100px]'}`}>
-                  <Artboard
-                    doc={view.doc}
-                    name={project.client}
-                    device={device}
-                    motion={showMotion ? view.motion : undefined}
-                    playToken={showMotion ? playToken : undefined}
-                    scrubTime={showMotion ? time : null}
-                    selected={layer}
-                    onSelect={setLayer}
-                    marked={marked}
-                    interactive
-                    fit="contain"
-                    className="rounded-xl shadow-[0_40px_100px_-30px_rgba(0,0,0,0.9)]"
-                  />
-                </div>
-              </div>
-              {pending.length > 0 && (
-                <div className="glass absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-full py-1.5 pl-4 pr-1.5 text-sm" onClick={(e) => e.stopPropagation()}>
-                  <Sparkle size={14} weight="fill" className="text-violet-400" />
-                  <span className="whitespace-nowrap text-text-2">{comparing ? 'Showing your version' : `Previewing ${pending.length} Muse proposal${pending.length > 1 ? 's' : ''}`}</span>
-                  <Button size="sm" variant="muse" onClick={() => setMuse(true)}>Review</Button>
-                </div>
-              )}
-              <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                <Segmented<Device> label="Device" value={device} onChange={setDevice} options={[{ id: 'desktop', label: 'Desktop', icon: <Desktop size={14} /> }, { id: 'tablet', label: 'Tablet', icon: <DeviceTablet size={14} /> }, { id: 'mobile', label: 'Phone', icon: <DeviceMobile size={14} /> }]} />
-                {mode === 'design' && <Button size="sm" variant="secondary" icon={<ArrowCounterClockwise size={14} />} onClick={() => { setMode('motion'); setTime(0); setPlayToken((v) => v + 1); setPlaying(true); }}>Play intro</Button>}
-              </div>
-            </div>
-          )}
+          {canvasArea}
           {showMotion && <Timeline p={previewProject} selected={layer} onSelect={setLayer} time={time} setTime={setTime} playing={playing} setPlaying={setPlaying} />}
         </section>
 
         {/* inspector */}
         <aside className={`thin-scroll hidden w-[288px] shrink-0 overflow-y-auto border-l border-hairline p-4 md:block ${museOpen ? 'xl:mr-[396px]' : ''}`} aria-label="Inspector">
-          <p className="mono-label text-text-4">{mode === 'space' ? 'Space · material and light' : mode === 'motion' ? `Motion · ${LAYERS.find((l) => l.id === layer)?.label}` : LAYERS.find((l) => l.id === layer)?.label}</p>
-          <div className="mt-4">
-            {mode === 'design' && <DesignInspector p={project} layer={layer} />}
-            {mode === 'motion' && <MotionInspector p={project} layer={layer} />}
-            {mode === 'space' && <SpaceInspector p={project} />}
-          </div>
+          <p className="mono-label text-text-4">{inspectorTitle}</p>
+          <div className="mt-4">{inspectorBody}</div>
           {pending.length > 0 && (
             <div className="mt-8 border-t border-hairline pt-4">
               <p className="mono-label text-violet-400">Muse proposals</p>

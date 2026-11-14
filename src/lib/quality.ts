@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { logPerf } from './perf';
 
 /**
  * Render tiers from Stage 01:
@@ -64,6 +65,9 @@ export const useQuality = create<QualityState>((set, get) => {
   const detected = detectTier();
   const stored = safeGet(KEY) as Tier | null;
   const override = stored === 'full' || stored === 'lite' || stored === 'still' ? stored : null;
+  logPerf('start', override
+    ? `Started in ${override} (chosen in the Motion menu; auto would be ${detected.tier}: ${detected.reason})`
+    : `Started in ${detected.tier}: ${detected.reason === 'url' ? 'set by ?tier' : detected.reason}`);
   return {
     tier: override ?? detected.tier,
     auto: detected.tier,
@@ -72,11 +76,18 @@ export const useQuality = create<QualityState>((set, get) => {
     reducedMotion: prefersReducedMotion(),
     setOverride: (t) => {
       safeSet(KEY, t);
-      set({ override: t, tier: t ?? get().auto });
+      const tier = t ?? get().auto;
+      logPerf('tier', t ? `Motion set to ${t} by the visitor` : `Motion back to automatic (${tier})`);
+      set({ override: t, tier });
     },
     downgrade: (reason) => {
-      if (get().override) return;
-      const next: Tier = get().tier === 'full' ? 'lite' : get().tier;
+      if (get().override) {
+        logPerf('downgrade', `Slow frames detected, but the visitor chose ${get().override}: no change`);
+        return;
+      }
+      const from = get().tier;
+      const next: Tier = from === 'full' ? 'lite' : from;
+      if (next !== from) logPerf('downgrade', `${from} → ${next}: ${reason}`);
       set({ tier: next, auto: next, reason });
     },
   };

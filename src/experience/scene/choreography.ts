@@ -18,6 +18,21 @@ export interface Shot {
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
 /**
+ * Desktop hero: place the drop so its left edge lies across the end of the headline (Stage 01:
+ * "the headline bends through the drop's edge"), measured from the real text layout so it holds
+ * at every width. The intro paragraph may sit behind the drop too, but never more than 70% of a
+ * radius deep. Uses the hero's resting camera (z 6.4, fov 35, looking at x 0.35).
+ */
+function heroAnchorX() {
+  const t = live.heroText;
+  if (!t.headRight || !t.height) return 1.0;
+  const u = (2 * 6.4 * Math.tan(THREE.MathUtils.degToRad(35 / 2))) / t.height; // world units per px
+  const R = 1 / u; // drop radius in px at hero scale 1
+  const cx = Math.max(t.headRight + 0.6 * R, t.copyRight + 0.3 * R);
+  return THREE.MathUtils.clamp(0.35 + (cx - t.width / 2) * u, 0.45, 1.7);
+}
+
+/**
  * The film. Given chapter progress (0 → 1 each), return where everything should be.
  * Chapters are sequential, so each block blends from the previous block's end state.
  * `aspect` lets portrait screens recompose instead of shrinking the desktop shot.
@@ -33,8 +48,8 @@ export function compose(shot: Shot, aspect: number) {
   const intro = c.intro;
   const form = range(intro, 0.5, 0.82);
   const settle = range(intro, 0.82, 1.0);
-  const heroX = portrait ? 0 : 1.45;
-  const heroY = portrait ? 1.95 : 0.05;
+  const heroX = portrait ? 0 : heroAnchorX();
+  const heroY = portrait ? 1.95 : 0.12;
   const heroScale = portrait ? 0.52 : 1.0;
 
   core.x = lerp(0, heroX, settle);
