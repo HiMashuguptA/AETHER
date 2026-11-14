@@ -4,6 +4,8 @@ The scroll-driven story site and the creative workspace behind it, in one React 
 Frontend only: every project, asset, comment and Muse proposal is mocked in local state.
 No backend, database, authentication, real AI, payments or deployment infrastructure.
 
+**Live:** https://aether-delta-lime.vercel.app (Vercel, deploys automatically from `main`)
+
 ## Run it
 
 ```bash
