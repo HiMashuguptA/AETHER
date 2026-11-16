@@ -4,6 +4,9 @@
   "installCommand": "npm ci",
   "buildCommand": "npm run build:deploy",
   "outputDirectory": "dist",
+  "regions": [
+    "sin1"
+  ],
   "functions": {
     "api/index.ts": {
       "maxDuration": 60,
