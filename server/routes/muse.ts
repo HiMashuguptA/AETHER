@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { one, q, tx, type Db } from '../db.js';
 import { currentUser, requireProject, requireUser, type ProjectRow } from '../lib/access.js';
 import { audit, body, clientIp, conflict, hash, notFound, param, rateLimit } from '../lib/http.js';
-import { exploreIdea, proposeForProject, type Draft } from '../services/muse/index.js';
+import { exploreIdea, museSelfTest, proposeForProject, type Draft } from '../services/muse/index.js';
+import { env } from '../env.js';
 import { lockProject, recordVersion, writeProject } from '../services/projects.js';
 import { logActivity } from '../services/workspaces.js';
 import { ChangeSchema, applyChange, currentValue, describeValue, type Change } from '../../shared/model.js';
@@ -17,6 +18,13 @@ export const proposalToClient = (p: any) => ({
 const messageToClient = (m: any, proposalIds: string[] = []) => ({
   id: m.id, projectId: m.project_id, role: m.role, text: m.body, context: m.context, source: m.source, model: m.model ?? undefined,
   proposalIds, at: new Date(m.created_at).getTime(),
+});
+
+/** Staging and local only: is the AI provider reachable, and if not, what did it say? Never available in production. */
+muse.get('/muse/selftest', async (c) => {
+  if (env.isProduction) throw notFound();
+  if (env.stage !== 'test') await rateLimit('muse-selftest', 12, 3600);
+  return c.json(await museSelfTest());
 });
 
 /** Idea first, account second: a visitor can explore an idea before signing up (tightly rate limited). */

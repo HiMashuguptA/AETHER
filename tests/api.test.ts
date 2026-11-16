@@ -504,3 +504,29 @@ describe('publishing', () => {
 });
 
 beforeAll(() => setProviderForTests(null));
+
+describe('operations', () => {
+  it('reports the Muse provider state on non-production environments only', async () => {
+    const r = await new Client().get('/api/muse/selftest');
+    expect(r.status).toBe(200);
+    expect(r.data).toMatchObject({ ok: false, provider: 'fallback', real: false });
+    const before = process.env.AETHER_ENV;
+    process.env.AETHER_ENV = 'production';
+    try { expect((await new Client().get('/api/muse/selftest')).status).toBe(404); expect((await new Client().get('/api/dev/outbox?email=a@b.co')).status).toBe(404); }
+    finally { process.env.AETHER_ENV = before; }
+  });
+
+  it('never returns password-reset links from the staging outbox', async () => {
+    const u = await newUser();
+    await new Client().post('/api/auth/request-password-reset', { email: u.email, redirectTo: '/#reset-password' });
+    const before = process.env.AETHER_ENV;
+    process.env.AETHER_ENV = 'preview';
+    process.env.DEV_OUTBOX = 'true';
+    try {
+      const r = await new Client().get(`/api/dev/outbox?email=${encodeURIComponent(u.email)}`);
+      expect(r.status).toBe(200);
+      expect(r.data.message?.kind ?? 'verify').toBe('verify');
+      expect(JSON.stringify(r.data)).not.toContain('reset-password');
+    } finally { process.env.AETHER_ENV = before; delete process.env.DEV_OUTBOX; }
+  });
+});

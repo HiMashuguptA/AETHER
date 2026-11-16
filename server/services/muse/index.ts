@@ -192,3 +192,29 @@ A person has described an idea for a site, app or brand. First interpret it (con
   });
   return { ...out, source: 'ai', model: provider.model };
 }
+
+/**
+ * Staging diagnostic: one tiny real request to the configured provider, so an operator can see
+ * whether Muse is reachable and why not (model not covered by free credit, no credit, bad key).
+ */
+export async function museSelfTest(): Promise<{ ok: boolean; provider: string; model: string | null; real: boolean; latencyMs?: number; answer?: unknown; error?: string }> {
+  const provider = activeProvider();
+  if (!provider) return { ok: false, provider: 'fallback', model: null, real: false, error: 'No AI provider is configured in this environment; Muse is running the labelled development fallback.' };
+  const started = Date.now();
+  try {
+    const res = await provider.complete({
+      system: 'You are a connectivity check. Answer with JSON only.',
+      user: 'Reply with {"word":"spark"}.',
+      schemaName: 'selftest',
+      schema: { type: 'object', additionalProperties: false, required: ['word'], properties: { word: { type: 'string' } } },
+      maxTokens: 30,
+      signal: AbortSignal.timeout(env.museTimeoutMs),
+    });
+    await track({}, 'selftest', provider, { inTok: res.inputTokens, outTok: res.outputTokens, ms: Date.now() - started, attempts: 1, status: 'ok' });
+    return { ok: true, provider: provider.name, model: provider.model, real: true, latencyMs: Date.now() - started, answer: res.json };
+  } catch (err) {
+    const message = (err as Error).message.slice(0, 400);
+    await track({}, 'selftest', provider, { ms: Date.now() - started, attempts: 1, status: 'error', error: message });
+    return { ok: false, provider: provider.name, model: provider.model, real: true, latencyMs: Date.now() - started, error: message };
+  }
+}
