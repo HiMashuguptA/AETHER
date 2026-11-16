@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
-import { MagnifyingGlass, UploadSimple, X, Cube, Drop, Image as ImageIcon, FilmStrip, SquaresFour, Plus } from '@phosphor-icons/react';
+import { MagnifyingGlass, UploadSimple, X, Cube, Drop, Image as ImageIcon, FilmStrip, SquaresFour, Plus, Check, Trash, DownloadSimple, WarningCircle, File as FileIcon } from '@phosphor-icons/react';
 import { useApp } from '../../data/store';
+import { roleCan, useRole } from '../../data/session';
 import type { Asset, AssetKind } from '../../data/types';
 import { Button } from '../../components/Button';
 import { Segmented, EmptyState, Avatar, timeAgo, personById } from '../components/bits';
@@ -17,7 +18,10 @@ const KIND: Record<AssetKind, { label: string; icon: React.ReactNode }> = {
 };
 
 function Thumb({ a, big = false }: { a: Asset; big?: boolean }) {
-  if (a.thumb) return <img src={a.thumb} alt="" className="h-full w-full object-cover" draggable={false} />;
+  if (a.failed) return <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[#0c0c0e] p-3 text-center text-xs text-red-400"><WarningCircle size={22} />{a.failed}</div>;
+  // previews are served by the API to signed-in members of the workspace only
+  if (a.thumb) return <img src={big && a.kind === 'image' && a.url ? a.url : a.thumb} alt="" className={`h-full w-full ${big ? 'object-contain' : 'object-cover'}`} draggable={false} loading="lazy" />;
+  if (a.mime && !a.swatch && !a.curve) return <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-[#0c0c0e] text-text-3">{a.kind === '3d' ? <Cube size={big ? 56 : 32} /> : a.kind === 'motion' ? <FilmStrip size={big ? 56 : 32} /> : <FileIcon size={big ? 56 : 32} />}<span className="mono-label">{a.name.split('.').pop()}</span></div>;
   if (a.swatch) {
     return (
       <div className="relative h-full w-full" style={{ background: a.swatch[0] }}>
@@ -47,10 +51,11 @@ function Thumb({ a, big = false }: { a: Asset; big?: boolean }) {
 
 export default function Library() {
   const assets = useApp((s) => s.assets);
-  const addAsset = useApp((s) => s.addAsset);
-  const updateAsset = useApp((s) => s.updateAsset);
+  const uploadAsset = useApp((s) => s.uploadAsset);
+  const deleteAsset = useApp((s) => s.deleteAsset);
+  const linkAsset = useApp((s) => s.linkAsset);
   const projects = useApp((s) => s.projects);
-  const toast = useApp((s) => s.toast);
+  const canEdit = roleCan(useRole(), 'editor');
   const [filter, setFilter] = useState<Filter>('all');
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<string | null>(null);
@@ -59,35 +64,36 @@ export default function Library() {
   const list = useMemo(() => assets.filter((a) => (filter === 'all' || a.kind === filter) && (a.name + a.tags.join(' ')).toLowerCase().includes(q.toLowerCase())), [assets, filter, q]);
   const current = assets.find((a) => a.id === open);
 
+  // type and size are checked here for quick feedback and again on the server, which also checks the file's contents
   const upload = (files: FileList | null) => {
-    if (!files?.length) return;
-    Array.from(files).slice(0, 6).forEach((f) => {
-      if (!f.type.startsWith('image/')) { toast({ text: `${f.name} isn’t an image. This demo accepts PNG, JPG, WebP or GIF.`, tone: 'error' }); return; }
-      if (f.size > 20 * 1024 * 1024) { toast({ text: `${f.name} is over 20 MB.`, tone: 'error' }); return; }
-      const url = URL.createObjectURL(f);
-      const id = addAsset({ name: f.name.replace(/\.[^.]+$/, ''), kind: 'image', thumb: url, tags: ['uploaded'], size: `${Math.max(1, Math.round(f.size / 1024))} KB`, uploading: 0 });
-      let p = 0;
-      const step = () => { p = Math.min(1, p + 0.18 + Math.random() * 0.15); updateAsset(id, { uploading: p >= 1 ? undefined : p }); if (p < 1) setTimeout(step, 160); else toast({ text: `${f.name} added to the library`, tone: 'success' }); };
-      setTimeout(step, 120);
-    });
+    if (!files?.length || !canEdit) return;
+    Array.from(files).slice(0, 8).forEach((f) => void uploadAsset(f));
+    if (fileInput.current) fileInput.current.value = '';
+  };
+  const remove = async (a: Asset) => {
+    if (a.uploading === undefined && !a.failed && !window.confirm(`Delete ${a.name}? The file is removed from storage and from ${a.uses} project${a.uses === 1 ? '' : 's'}.`)) return;
+    if (await deleteAsset(a.id)) setOpen(null);
   };
 
   return (
     <div
       className="mx-auto max-w-[1440px] px-4 py-8 md:px-8 md:py-10"
-      onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragging(true); } }}
+      onDragOver={(e) => { if (canEdit && e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragging(true); } }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false); }}
       onDrop={(e) => { e.preventDefault(); setDragging(false); upload(e.dataTransfer.files); }}
     >
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-3xl font-light tracking-[-0.02em] text-mist md:text-4xl">Library</h1>
-          <p className="mt-1 text-sm text-text-3">{assets.length} shared assets. Drop images anywhere on this page to add them.</p>
+          <p className="mt-1 text-sm text-text-3">{assets.length} {assets.length === 1 ? 'asset' : 'assets'} in this workspace, private to its members. {canEdit ? 'Drop files anywhere on this page to add them.' : 'Your role can view and download.'}</p>
         </div>
-        <div className="flex gap-2">
-          <input ref={fileInput} type="file" accept="image/*" multiple className="sr-only" onChange={(e) => upload(e.target.files)} aria-label="Upload images" />
-          <Button variant="primary" icon={<UploadSimple size={16} />} onClick={() => fileInput.current?.click()}>Upload</Button>
-        </div>
+        {canEdit && (
+          <div className="flex flex-col items-end gap-1">
+            <input ref={fileInput} type="file" accept=".png,.jpg,.jpeg,.webp,.avif,.gif,.glb,.json,.pdf" multiple className="sr-only" onChange={(e) => upload(e.target.files)} aria-label="Upload files" />
+            <Button variant="primary" icon={<UploadSimple size={16} />} onClick={() => fileInput.current?.click()}>Upload</Button>
+            <span className="text-[11px] text-text-4">PNG, JPEG, WebP, AVIF, GIF up to 15 MB · GLB up to 40 MB · Lottie JSON · PDF</span>
+          </div>
+        )}
       </header>
       <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <label className="flex h-10 items-center gap-2 rounded-full border border-hairline bg-white/[0.02] px-3 focus-within:border-violet-400/60 lg:w-72">
@@ -102,7 +108,9 @@ export default function Library() {
       {dragging && <div className="pointer-events-none fixed inset-4 z-30 flex items-center justify-center rounded-3xl border-2 border-dashed border-violet-400/70 bg-violet-500/[0.06] text-lg text-mist">Drop to add to the library</div>}
       <div className="mt-6">
         {list.length === 0 ? (
-          <EmptyState title={q ? `Nothing matches “${q}”` : 'No assets of this type yet'} body="Upload images or save a material, motion preset or component from a project canvas." action={<Button onClick={() => { setQ(''); setFilter('all'); }}>Show everything</Button>} />
+          assets.length === 0
+            ? <EmptyState title="The library is empty" body="Upload images, GLB models, Lottie files or PDFs. They are stored privately for this workspace and can be attached to projects." action={canEdit ? <Button variant="primary" icon={<UploadSimple size={16} />} onClick={() => fileInput.current?.click()}>Upload the first file</Button> : undefined} />
+            : <EmptyState title={q ? `Nothing matches “${q}”` : 'No assets of this type yet'} body="Try another search or type." action={<Button onClick={() => { setQ(''); setFilter('all'); }}>Show everything</Button>} />
         ) : (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             {list.map((a) => (
@@ -118,7 +126,7 @@ export default function Library() {
                     )}
                   </div>
                   <p className="mt-2 truncate text-sm text-mist">{a.name}</p>
-                  <p className="text-xs text-text-4">{a.size} · used {a.uses}×</p>
+                  <p className="text-xs text-text-4">{a.failed ? 'Upload failed' : a.uploading !== undefined ? `Uploading ${Math.round(a.uploading * 100)}%` : `${a.size} · in ${a.uses} project${a.uses === 1 ? '' : 's'}`}</p>
                 </button>
               </li>
             ))}
@@ -147,18 +155,32 @@ export default function Library() {
               <dt className="text-text-4">Added by</dt><dd className="flex items-center gap-2 text-text-2"><Avatar id={current.byId} size={20} />{personById(current.byId).name}</dd>
               <dt className="text-text-4">Updated</dt><dd className="text-text-2">{timeAgo(current.updatedAt)}</dd>
               <dt className="text-text-4">Size</dt><dd className="text-text-2">{current.size}</dd>
-              <dt className="text-text-4">Used</dt><dd className="text-text-2">{current.uses} times</dd>
+              {current.width && current.height ? <><dt className="text-text-4">Dimensions</dt><dd className="text-text-2">{current.width} × {current.height}</dd></> : null}
+              {current.mime ? <><dt className="text-text-4">Type</dt><dd className="font-mono text-xs text-text-2">{current.mime}</dd></> : null}
               {current.curve && <><dt className="text-text-4">Curve</dt><dd className="font-mono text-text-2">cubic-bezier({current.curve.join(', ')})</dd></>}
               {current.swatch && <><dt className="text-text-4">Colours</dt><dd className="flex gap-1.5">{current.swatch.map((c) => <span key={c} className="h-5 w-5 rounded-full border border-white/10" style={{ background: c }} title={c} />)}</dd></>}
             </dl>
-            <p className="mt-6 text-xs text-text-4">Use in a project</p>
-            <div className="mt-2 flex flex-col gap-1.5">
-              {projects.slice(0, 4).map((p) => (
-                <button key={p.id} onClick={() => { updateAsset(current.id, { uses: current.uses + 1 }); toast({ text: `${current.name} added to ${p.name}`, tone: 'success' }); setOpen(null); }} className="flex items-center justify-between rounded-xl border border-hairline px-3 py-2.5 text-left text-sm text-text-2 hover:border-hairline-strong hover:text-mist">
-                  {p.name}<Plus size={14} />
-                </button>
-              ))}
-            </div>
+            {!current.failed && current.uploading === undefined && (
+              <>
+                <p className="mt-6 text-xs text-text-4">Projects using this asset</p>
+                <div className="mt-2 flex flex-col gap-1.5">
+                  {projects.length === 0 && <p className="text-sm text-text-3">No projects yet.</p>}
+                  {projects.slice(0, 8).map((p) => {
+                    const on = current.projectIds?.includes(p.id) ?? false;
+                    return (
+                      <button key={p.id} disabled={!canEdit} aria-pressed={on} onClick={() => void linkAsset(current.id, p.id, !on)} className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition-colors disabled:opacity-60 ${on ? 'border-violet-400/60 bg-violet-500/[0.06] text-mist' : 'border-hairline text-text-2 hover:border-hairline-strong hover:text-mist'}`}>
+                        {p.name}{on ? <Check size={14} className="text-violet-300" /> : <Plus size={14} />}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-6 flex gap-2">
+                  {current.url && <a href={current.url} download={current.name} className="inline-flex h-10 items-center gap-2 rounded-full border border-hairline-strong bg-white/[0.04] px-4 text-[15px] font-semibold text-mist hover:bg-white/[0.08]"><DownloadSimple size={16} /> Download</a>}
+                  {canEdit && <Button variant="danger" icon={<Trash size={16} />} onClick={() => void remove(current)}>Delete</Button>}
+                </div>
+              </>
+            )}
+            {(current.failed || current.uploading !== undefined) && <Button className="mt-6 self-start" onClick={() => void remove(current)}>Remove from list</Button>}
           </aside>
         </div>
       )}

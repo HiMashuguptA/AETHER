@@ -6,6 +6,8 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   base: './',
   plugins: [react(), tailwindcss()],
+  // local development: `npm run dev:api` serves the API on 8787
+  server: { proxy: { '/api': 'http://localhost:8787', '/p': 'http://localhost:8787' } },
   build: {
     target: 'es2022',
     assetsInlineLimit: 0,

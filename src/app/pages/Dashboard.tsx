@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import { ArrowRight, Sparkle, Plus, ChatCircle, RocketLaunch, PencilSimple, Lightning } from '@phosphor-icons/react';
 import { useApp } from '../../data/store';
-import { me } from '../../data/seed';
+import { useSession } from '../../data/session';
 import { stageWide, stageImage } from '../../data/assets';
 import { navigate } from '../../lib/router';
 import { Button } from '../../components/Button';
-import { Avatar, AvatarStack, StageBadge, timeAgo, formatDate, personById } from '../components/bits';
+import { Avatar, AvatarStack, StageBadge, timeAgo, formatDate, personById, EmptyState } from '../components/bits';
 import SpotlightCard from '../../components/reactbits/SpotlightCard';
 import { STAGE_LABEL } from '../../lib/tokens';
 
@@ -17,17 +17,28 @@ function greeting() {
 const ICON = { muse: Sparkle, edit: PencilSimple, publish: RocketLaunch, comment: ChatCircle, create: Plus };
 
 export default function Dashboard() {
+  const firstName = useSession((s) => (s.user?.name ?? '').split(' ')[0] || 'there');
   const projects = useApp((s) => s.projects);
   const activity = useApp((s) => s.activity);
   const proposals = useApp((s) => s.proposals);
   const lastId = useApp((s) => s.lastProjectId);
-  const send = useApp((s) => s.sendToMuse);
   const setMuse = useApp((s) => s.setMuseOpen);
   const sorted = useMemo(() => [...projects].sort((a, b) => b.updatedAt - a.updatedAt), [projects]);
   const current = projects.find((p) => p.id === lastId) ?? sorted[0];
   const live = projects.filter((p) => p.published).length;
   const pending = proposals.filter((p) => p.status === 'pending').length;
-  const accepted = 38 + proposals.filter((p) => p.status === 'accepted').length;
+  const accepted = useApp((s) => s.museAccepted);
+  // real things that need a decision: pending Muse proposals and unresolved comments
+  const attention = useMemo(() => {
+    const out: { key: string; pid: string; name: string; text: string; muse: boolean }[] = [];
+    for (const p of sorted) {
+      const n = proposals.filter((x) => x.projectId === p.id && x.status === 'pending').length;
+      if (n) out.push({ key: `m-${p.id}`, pid: p.id, name: p.name, text: `${n} Muse proposal${n > 1 ? 's are' : ' is'} waiting for your decision.`, muse: true });
+      const c = p.comments.filter((x) => !x.resolved).length;
+      if (c) out.push({ key: `c-${p.id}`, pid: p.id, name: p.name, text: `${c} open comment${c > 1 ? 's' : ''}.`, muse: false });
+    }
+    return out.slice(0, 5);
+  }, [sorted, proposals]);
   const atRisk = projects.filter((p) => p.health === 'At risk');
 
   return (
@@ -35,7 +46,7 @@ export default function Dashboard() {
       <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="mono-label text-text-3">{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-          <h1 className="mt-2 text-4xl font-light tracking-[-0.02em] text-mist md:text-5xl">{greeting()}, {me.name.split(' ')[0]}</h1>
+          <h1 className="mt-2 text-4xl font-light tracking-[-0.02em] text-mist md:text-5xl">{greeting()}, {firstName}</h1>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" icon={<Sparkle size={16} className="text-violet-400" />} onClick={() => setMuse(true)}>Ask Muse</Button>
@@ -78,7 +89,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-4">
           {[
             { k: 'Active projects', v: projects.filter((p) => !p.published).length, s: `${atRisk.length} at risk` },
-            { k: 'Live experiences', v: live, s: 'on aether.site' },
+            { k: 'Live experiences', v: live, s: 'published' },
             { k: 'Muse changes accepted', v: accepted, s: 'this month' },
             { k: 'Waiting for review', v: pending, s: pending ? 'open Muse to decide' : 'all clear' },
           ].map((st) => (
@@ -97,6 +108,7 @@ export default function Dashboard() {
           <h2 id="dash-projects" className="text-xl font-normal text-mist">Projects</h2>
           <button onClick={() => navigate('projects', { transition: false })} className="text-sm text-text-3 hover:text-mist">View all</button>
         </div>
+        {sorted.length === 0 && <div className="mt-4"><EmptyState title="No projects yet" body="Describe an idea and Muse will propose three directions to start from." action={<Button variant="primary" onClick={() => navigate('start', { transition: false })}>Start your first project</Button>} /></div>}
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
           {sorted.map((p) => (
             <button key={p.id} onClick={() => navigate(`project-${p.id}`, { transition: false })} className="group text-left" data-cursor="Open">
@@ -113,29 +125,27 @@ export default function Dashboard() {
 
       <section className="mt-12 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="card p-5">
-          <div className="flex items-center gap-2"><Sparkle size={16} weight="fill" className="text-violet-400" /><h2 className="text-base font-medium text-mist">Muse noticed</h2></div>
-          <ul className="mt-4 flex flex-col gap-3">
-            {[
-              { pid: 'halden', text: 'Two comments on Halden say the hero settles too slowly.', prompt: 'The hero motion feels sleepy' },
-              { pid: 'northfold', text: 'Northfold’s subheading is hard to read in sunlight on phones.', prompt: 'Improve contrast for small screens' },
-              { pid: 'arclight', text: 'Arclight’s headline could lead with the outcome.', prompt: 'Tighten the headline and CTA copy' },
-            ].map((s) => {
-              const pr = projects.find((p) => p.id === s.pid);
-              return (
-                <li key={s.pid} className="flex items-start justify-between gap-4 rounded-xl border border-violet-400/25 bg-violet-500/[0.05] p-3.5">
+          <div className="flex items-center gap-2"><Sparkle size={16} weight="fill" className="text-violet-400" /><h2 className="text-base font-medium text-mist">Waiting for you</h2></div>
+          {attention.length === 0 ? (
+            <p className="mt-4 text-sm leading-6 text-text-3">Nothing is waiting. Muse proposals to review and open comments will show up here.</p>
+          ) : (
+            <ul className="mt-4 flex flex-col gap-3">
+              {attention.map((s) => (
+                <li key={s.key} className="flex items-start justify-between gap-4 rounded-xl border border-violet-400/25 bg-violet-500/[0.05] p-3.5">
                   <div>
                     <p className="text-sm text-mist">{s.text}</p>
-                    <p className="mono-label mt-1 text-text-3">{pr?.name}</p>
+                    <p className="mono-label mt-1 text-text-3">{s.name}</p>
                   </div>
-                  <Button size="sm" variant="muse" onClick={() => { useApp.setState({ lastProjectId: s.pid }); setMuse(true); send(s.pid, s.prompt, ['@Hero frame']); }}>Get proposals</Button>
+                  <Button size="sm" variant={s.muse ? 'muse' : 'secondary'} onClick={() => { useApp.setState({ lastProjectId: s.pid }); navigate(`project-${s.pid}`, { transition: false }); if (s.muse) setMuse(true); }}>{s.muse ? 'Review' : 'Open'}</Button>
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="card p-5">
           <div className="flex items-center gap-2"><Lightning size={16} weight="fill" className="text-cyan-500" /><h2 className="text-base font-medium text-mist">Activity</h2></div>
           <ul className="mt-4 flex flex-col">
+            {activity.length === 0 && <li className="py-3 text-sm text-text-3">Activity from you and your team will appear here.</li>}
             {activity.slice(0, 6).map((a) => {
               const Icon = ICON[a.kind];
               return (

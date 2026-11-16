@@ -1,13 +1,19 @@
 {
   "name": "aether",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:api": "tsx watch server/dev.ts",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc -b",
-    "preview": "vite preview"
+    "build:deploy": "node scripts/migrate-if-configured.mjs && npm run build",
+    "typecheck": "tsc -b && tsc -p tsconfig.server.json",
+    "preview": "vite preview",
+    "start": "tsx server/dev.ts",
+    "db:migrate": "tsx server/migrate.ts",
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
@@ -32,6 +38,7 @@
     "zustand": "^5.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.5",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
@@ -45,5 +52,8 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

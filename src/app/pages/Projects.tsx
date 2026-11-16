@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Kanban, ListBullets, ChartBar, MagnifyingGlass, Plus, CaretUp, CaretDown, DotsThree } from '@phosphor-icons/react';
+import { Kanban, ListBullets, ChartBar, MagnifyingGlass, Plus, CaretUp, CaretDown, DotsThree, CopySimple, Trash } from '@phosphor-icons/react';
+import { roleCan, useRole } from '../../data/session';
 import { useApp } from '../../data/store';
 import { navigate } from '../../lib/router';
 import { STAGES, STAGE_LABEL, STAGE_MEANING, type Stage } from '../../lib/tokens';
@@ -7,7 +8,6 @@ import { stageImage } from '../../data/assets';
 import { Button } from '../../components/Button';
 import { AvatarStack, Segmented, StageBadge, timeAgo, formatDate, EmptyState, personById } from '../components/bits';
 import type { Project } from '../../data/types';
-import { people } from '../../data/seed';
 
 type View = 'board' | 'list' | 'timeline';
 type SortKey = 'name' | 'stage' | 'due' | 'updatedAt';
@@ -15,9 +15,13 @@ type SortKey = 'name' | 'stage' | 'due' | 'updatedAt';
 function MoveMenu({ p }: { p: Project }) {
   const [open, setOpen] = useState(false);
   const setStage = useApp((s) => s.setStage);
+  const duplicate = useApp((s) => s.duplicateProject);
+  const remove = useApp((s) => s.deleteProject);
+  const role = useRole();
+  if (!roleCan(role, 'editor')) return null;
   return (
     <div className="relative">
-      <button onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }} aria-label={`Move ${p.name} to another stage`} aria-expanded={open} className="flex h-7 w-7 items-center justify-center rounded-full text-text-3 hover:bg-white/[0.06] hover:text-mist">
+      <button onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }} aria-label={`Actions for ${p.name}`} aria-expanded={open} className="flex h-7 w-7 items-center justify-center rounded-full text-text-3 hover:bg-white/[0.06] hover:text-mist">
         <DotsThree size={16} weight="bold" />
       </button>
       {open && (
@@ -28,6 +32,11 @@ function MoveMenu({ p }: { p: Project }) {
               <img src={stageImage[s]} alt="" className="h-4 w-4 rounded-full" /> {STAGE_LABEL[s]}
             </button>
           ))}
+          <div className="my-1 h-px bg-hairline" />
+          <button role="menuitem" onClick={() => { setOpen(false); void duplicate(p.id); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-text-2 hover:bg-white/[0.06] hover:text-mist"><CopySimple size={14} /> Duplicate</button>
+          {roleCan(role, 'admin') && (
+            <button role="menuitem" onClick={() => { setOpen(false); if (window.confirm(`Delete ${p.name}? Its versions, comments and Muse history go with it${p.published ? ', and its public page stops being served' : ''}.`)) void remove(p.id); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-red-400 hover:bg-red-500/10"><Trash size={14} /> Delete</button>
+          )}
         </div>
       )}
     </div>
@@ -184,7 +193,10 @@ export default function Projects() {
   const [view, setView] = useState<View>('board');
   const [q, setQ] = useState('');
   const [owner, setOwner] = useState('all');
-  const list = projects.filter((p) => (owner === 'all' || p.teamIds.includes(owner)) && (p.name + p.client).toLowerCase().includes(q.toLowerCase()));
+  const [status, setStatus] = useState('all');
+  const members = useApp((s) => s.members);
+  const canCreate = roleCan(useRole(), 'editor');
+  const list = projects.filter((p) => (owner === 'all' || p.ownerId === owner) && (status === 'all' || (status === 'live' ? !!p.published : p.health === status)) && (p.name + p.client + p.description).toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-8 md:px-8 md:py-10">
@@ -193,7 +205,7 @@ export default function Projects() {
           <h1 className="text-3xl font-light tracking-[-0.02em] text-mist md:text-4xl">Projects</h1>
           <p className="mt-1 text-sm text-text-3">{projects.length} projects across six stages. Drag a card, or use its menu, to move it.</p>
         </div>
-        <Button variant="primary" icon={<Plus size={16} weight="bold" />} onClick={() => navigate('start', { transition: false })}>New project</Button>
+        {canCreate && <Button variant="primary" icon={<Plus size={16} weight="bold" />} onClick={() => navigate('start', { transition: false })}>New project</Button>}
       </header>
       <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -203,10 +215,16 @@ export default function Projects() {
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search projects" className="w-48 bg-transparent text-sm text-mist placeholder:text-text-4 focus:outline-none" />
           </label>
           <label className="flex h-10 items-center gap-2 rounded-full border border-hairline bg-white/[0.02] px-3 text-sm text-text-2">
-            <span className="text-text-3">Person</span>
+            <span className="text-text-3">Created by</span>
             <select value={owner} onChange={(e) => setOwner(e.target.value)} className="bg-transparent text-mist focus:outline-none">
               <option value="all" className="bg-graphite">Everyone</option>
-              {people.map((p) => <option key={p.id} value={p.id} className="bg-graphite">{p.name}</option>)}
+              {members.map((p) => <option key={p.id} value={p.id} className="bg-graphite">{p.name}</option>)}
+            </select>
+          </label>
+          <label className="flex h-10 items-center gap-2 rounded-full border border-hairline bg-white/[0.02] px-3 text-sm text-text-2">
+            <span className="text-text-3">Status</span>
+            <select value={status} onChange={(e) => setStatus(e.target.value)} className="bg-transparent text-mist focus:outline-none">
+              {[['all', 'Any'], ['On track', 'On track'], ['In review', 'In review'], ['At risk', 'At risk'], ['live', 'Published']].map(([v, l]) => <option key={v} value={v} className="bg-graphite">{l}</option>)}
             </select>
           </label>
         </div>
@@ -222,8 +240,10 @@ export default function Projects() {
         />
       </div>
       <div className="mt-6">
-        {list.length === 0 ? (
-          <EmptyState title="No projects match" body={`Nothing for “${q}”${owner !== 'all' ? ` with ${personById(owner).name}` : ''}. Clear the filters or start something new.`} action={<Button onClick={() => { setQ(''); setOwner('all'); }}>Clear filters</Button>} />
+        {projects.length === 0 ? (
+          <EmptyState title="No projects yet" body="Describe an idea and Muse will propose three directions to start from." action={canCreate ? <Button variant="primary" onClick={() => navigate('start', { transition: false })}>Start your first project</Button> : undefined} />
+        ) : list.length === 0 ? (
+          <EmptyState title="No projects match" body={`Nothing ${q ? `for “${q}” ` : ''}${owner !== 'all' ? `created by ${personById(owner).name} ` : ''}with these filters. Clear them or start something new.`} action={<Button onClick={() => { setQ(''); setOwner('all'); setStatus('all'); }}>Clear filters</Button>} />
         ) : view === 'board' ? <Board list={list} /> : view === 'list' ? <ListView list={list} /> : <Timeline list={list} />}
       </div>
     </div>

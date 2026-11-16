@@ -179,6 +179,8 @@ workspaces.get('/dev/outbox', async (c) => {
   const email = (c.req.query('email') ?? '').toLowerCase();
   if (!email) throw badRequest('email is required');
   if (env.stage !== 'test') await rateLimit(`outbox:${clientIp(c)}`, 30, 60);
-  const row = await one<{ kind: string; url: string; created_at: Date }>(`select kind, url, created_at from dev_outbox where email = $1 and created_at > now() - interval '1 hour' order by id desc limit 1`, [email]);
+  // password-reset links are never exposed here outside automated tests: that would let anyone take over a staging account
+  const kinds = env.stage === 'test' ? ['verify', 'invite', 'reset'] : ['verify'];
+  const row = await one<{ kind: string; url: string; created_at: Date }>(`select kind, url, created_at from dev_outbox where email = $1 and kind = any($2) and created_at > now() - interval '1 hour' order by id desc limit 1`, [email, kinds]);
   return c.json({ message: row ? { kind: row.kind, url: row.url, at: new Date(row.created_at).getTime() } : null });
 });

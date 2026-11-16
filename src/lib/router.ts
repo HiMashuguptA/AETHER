@@ -12,6 +12,8 @@ import { useSyncExternalStore } from 'react';
  *   #brand-kit         → workspace brand kit
  *   #project-<id>      → project canvas
  *   #launch-<id>       → preview and publish
+ *   #team, #account    → workspace members, your account
+ *   #signin, #signup, #forgot, #reset-password?token=, #verified, #join?token=, #check-email → authentication
  */
 export type Route =
   | { name: 'story'; anchor?: string }
@@ -23,12 +25,23 @@ export type Route =
   | { name: 'brand-kit' }
   | { name: 'project'; id: string }
   | { name: 'launch'; id: string }
+  | { name: 'team' }
+  | { name: 'account' }
+  | { name: 'auth'; view: AuthView; token?: string }
   | { name: 'not-found'; hash: string };
+
+export type AuthView = 'signin' | 'signup' | 'forgot' | 'reset-password' | 'verified' | 'join' | 'check-email';
+const AUTH_VIEWS = new Set<string>(['signin', 'signup', 'forgot', 'reset-password', 'verified', 'join', 'check-email']);
 
 const STORY_ANCHORS = new Set(['main', 'awakening', 'spark', 'evolution', 'showcase', 'architecture', 'platform', 'portal', 'launch-story']);
 
 export function parse(hash: string): Route {
-  const h = hash.replace(/^#/, '');
+  const raw = hash.replace(/^#/, '');
+  // links from emails carry a one-time token: #reset-password?token=… and #join?token=…
+  const [h, query = ''] = raw.split('?');
+  if (AUTH_VIEWS.has(h)) return { name: 'auth', view: h as AuthView, token: new URLSearchParams(query).get('token') ?? undefined };
+  if (h === 'team') return { name: 'team' };
+  if (h === 'account') return { name: 'account' };
   if (!h || STORY_ANCHORS.has(h)) return { name: 'story', anchor: h || undefined };
   if (h === 'start') return { name: 'start' };
   if (h === 'workspace') return { name: 'workspace' };

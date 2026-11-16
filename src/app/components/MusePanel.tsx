@@ -4,6 +4,7 @@ import { useApp } from '../../data/store';
 import type { Proposal } from '../../data/types';
 import { Button } from '../../components/Button';
 import { navigate } from '../../lib/router';
+import { roleCan, useRole, useSession } from '../../data/session';
 
 const SUGGESTIONS = ['Make the hero bolder', 'The hero motion feels sleepy', 'Improve contrast for small screens', 'Tighten the headline and CTA copy', 'Add more violet rim light to the 3D Core'];
 const CONTEXT = ['@Hero frame', '@Motion', '@Brand kit', '@Space'];
@@ -15,6 +16,7 @@ export function ProposalCard({ p, compact = false }: { p: Proposal; compact?: bo
   const setComparing = useApp((s) => s.setComparing);
   const setCompare = (v: boolean) => { setCompareLocal(v); setComparing(v); };
   const pending = p.status === 'pending';
+  const canDecide = roleCan(useRole(), 'editor');
   return (
     <div className={`rounded-2xl border p-3.5 transition-colors duration-300 ${pending ? 'border-violet-400/45 bg-violet-500/[0.06]' : 'border-hairline bg-white/[0.02]'}`}>
       <div className="flex items-start justify-between gap-3">
@@ -27,14 +29,14 @@ export function ProposalCard({ p, compact = false }: { p: Proposal; compact?: bo
         {pending ? (
           <span className="mono-label shrink-0 text-violet-400">Proposed</span>
         ) : (
-          <span className={`mono-label shrink-0 ${p.status === 'accepted' ? 'text-green-500' : 'text-text-4'}`}>{p.status === 'accepted' ? 'Accepted' : 'Rejected'}</span>
+          <span className={`mono-label shrink-0 ${p.status === 'accepted' ? 'text-green-500' : 'text-text-4'}`}>{p.status === 'accepted' ? 'Accepted' : p.status === 'stale' ? 'Out of date' : 'Rejected'}</span>
         )}
       </div>
       {!compact && <p className="mt-2 text-xs leading-5 text-text-3">{p.rationale}</p>}
       {pending && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="primary" icon={<Check size={14} weight="bold" />} onClick={() => accept(p.id)}>Accept</Button>
-          <Button size="sm" variant="secondary" icon={<X size={14} />} onClick={() => reject(p.id)}>Reject</Button>
+          <Button size="sm" variant="primary" icon={<Check size={14} weight="bold" />} onClick={() => accept(p.id)} disabled={!canDecide}>Accept</Button>
+          <Button size="sm" variant="secondary" icon={<X size={14} />} onClick={() => reject(p.id)} disabled={!canDecide}>Reject</Button>
           <Button size="sm" variant="tertiary" icon={<ArrowsLeftRight size={14} />} onPointerDown={() => setCompare(true)} onPointerUp={() => setCompare(false)} onPointerLeave={() => setCompare(false)} onKeyDown={(e) => e.key === ' ' && setCompare(true)} onKeyUp={() => setCompare(false)} aria-label="Hold to see your current version">
             Hold to compare
           </Button>
@@ -65,7 +67,12 @@ export default function MusePanel({ projectId }: { projectId?: string }) {
   const scroller = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
   const pending = proposals.filter((p) => p.status === 'pending');
+  const loadMuse = useApp((s) => s.loadMuse);
+  const canEdit = roleCan(useRole(), 'editor');
+  const museReal = useSession((s) => s.capabilities?.muse.real);
 
+  // the conversation and every proposal are stored with the project
+  useEffect(() => { if (open && pid && project) void loadMuse(pid); }, [open, pid, !!project, loadMuse]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' }); }, [messages, proposals.length, thinking]);
   useEffect(() => { if (open) setTimeout(() => field.current?.focus(), 60); }, [open]);
   useEffect(() => {
@@ -76,7 +83,7 @@ export default function MusePanel({ projectId }: { projectId?: string }) {
   }, [open, setOpen]);
 
   const submit = (value = text) => {
-    if (!value.trim() || !project) return;
+    if (!value.trim() || !project || !canEdit) return;
     send(project.id, value.trim(), ctx);
     setText('');
   };
@@ -96,6 +103,7 @@ export default function MusePanel({ projectId }: { projectId?: string }) {
           <div>
             <p className="text-sm font-medium text-mist">Muse</p>
             <p className="text-xs text-text-3">{project ? project.name : 'No project selected'}</p>
+            {museReal === false && <p className="mono-label mt-0.5 text-yellow-500" title="No AI provider is configured in this environment. Replies come from a built-in rule engine and are labelled.">Development fallback · not AI</p>}
           </div>
         </div>
         <button onClick={() => setOpen(false)} aria-label="Close Muse" className="flex h-8 w-8 items-center justify-center rounded-full text-text-3 hover:bg-white/[0.06] hover:text-mist"><X size={16} /></button>
@@ -120,7 +128,9 @@ export default function MusePanel({ projectId }: { projectId?: string }) {
               </div>
             ) : (
               <div key={m.id} className="flex flex-col gap-3">
-                <p className="text-sm leading-6 text-text-2">{m.text}{m.streaming && <span className="ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 animate-[aether-pulse_0.9s_ease-in-out_infinite] bg-violet-400" />}</p>
+                {m.source === 'fallback' && !m.failed && <span className="mono-label self-start rounded-full border border-yellow-500/40 px-2 py-0.5 text-yellow-500">Development fallback · not an AI response</span>}
+                {m.source === 'ai' && m.model && <span className="mono-label self-start text-text-4">{m.model}</span>}
+                <p className={`text-sm leading-6 ${m.failed ? 'rounded-xl border border-red-500/40 p-3 text-red-300' : 'text-text-2'}`} role={m.failed ? 'alert' : undefined}>{m.failed ? 'Muse could not answer. ' : ''}{m.text}{m.streaming && <span className="ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 animate-[aether-pulse_0.9s_ease-in-out_infinite] bg-violet-400" />}</p>
                 {m.proposalIds?.map((id) => {
                   const p = proposals.find((x) => x.id === id);
                   return p ? <ProposalCard key={id} p={p} /> : null;
@@ -131,7 +141,7 @@ export default function MusePanel({ projectId }: { projectId?: string }) {
           {thinking && (
             <div className="flex items-center gap-2 text-sm text-text-3">
               <span className="flex gap-1">{[0, 1, 2].map((d) => <span key={d} className="h-1.5 w-1.5 animate-[aether-pulse_1s_ease-in-out_infinite] rounded-full bg-violet-400" style={{ animationDelay: `${d * 160}ms` }} />)}</span>
-              Muse is looking at the hero
+              Muse is reading the project
             </div>
           )}
         </div>
@@ -167,11 +177,11 @@ export default function MusePanel({ projectId }: { projectId?: string }) {
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } }}
             rows={2}
-            placeholder={project ? 'Describe a change. Muse will propose, you decide.' : 'Open a project first'}
-            disabled={!project}
+            placeholder={!project ? 'Open a project first' : canEdit ? 'Describe a change. Muse will propose, you decide.' : 'Your role can read this conversation but not ask Muse'}
+            disabled={!project || !canEdit}
             className="thin-scroll max-h-32 min-h-[44px] flex-1 resize-none bg-transparent px-2 py-1.5 text-sm text-mist placeholder:text-text-4 focus:outline-none"
           />
-          <Button type="submit" variant="muse" size="sm" className="!h-9 !w-9 !px-0" disabled={!text.trim() || !project} aria-label="Send to Muse"><ArrowUp size={16} weight="bold" /></Button>
+          <Button type="submit" variant="muse" size="sm" className="!h-9 !w-9 !px-0" disabled={!text.trim() || !project || !canEdit} aria-label="Send to Muse"><ArrowUp size={16} weight="bold" /></Button>
         </div>
         {!projectId && project && (
           <button type="button" onClick={() => navigate(`project-${project.id}`, { transition: false })} className="mt-2 text-xs text-text-3 hover:text-mist">Open {project.name} to see proposals on the canvas</button>

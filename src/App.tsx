@@ -7,6 +7,7 @@ import Toaster from './app/components/Toaster';
 import Story from './experience/Story';
 import NotFound from './app/pages/NotFound';
 import { perfEnabled } from './lib/perf';
+import { useSession } from './data/session';
 
 const Workspace = lazy(() => import('./app/Workspace'));
 // development diagnostics: its code is only downloaded when enabled (dev server or ?perf)
@@ -23,6 +24,9 @@ export default function App() {
     document.documentElement.classList.toggle('motion-off', tier === 'still' || reduced);
   }, [tier, reduced]);
 
+  // who is signed in (also tells the story's navigation whether to say "Sign in" or "Open workspace")
+  useEffect(() => { void useSession.getState().load(); }, []);
+
   useEffect(() => {
     const titles: Record<string, string> = {
       story: 'ÆTHER — Beyond the interface',
@@ -34,6 +38,9 @@ export default function App() {
       'brand-kit': 'Brand kit · ÆTHER',
       project: 'Canvas · ÆTHER',
       launch: 'Launch · ÆTHER',
+      team: 'Team · ÆTHER',
+      account: 'Account · ÆTHER',
+      auth: 'Sign in · ÆTHER',
       'not-found': 'Not formed yet · ÆTHER',
     };
     document.title = titles[route.name] ?? 'ÆTHER';

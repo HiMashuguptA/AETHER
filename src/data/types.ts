@@ -49,6 +49,10 @@ export interface Check { id: string; group: 'Performance' | 'Accessibility' | 'S
 
 export interface Project {
   id: string;
+  /** saved revision the browser last saw; sent with every save so edits never overwrite each other */
+  revision?: number;
+  slug?: string;
+  workspaceId?: string;
   name: string;
   client: string;
   description: string;
@@ -84,7 +88,9 @@ export interface Proposal {
   to: string;
   rationale: string;
   change: ProposalChange;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'rejected' | 'stale';
+  /** 'ai' a model wrote it; 'fallback' the labelled development engine; 'check' a launch check */
+  source?: 'ai' | 'fallback' | 'check';
   createdAt: number;
 }
 
@@ -96,6 +102,10 @@ export interface MuseMessage {
   streaming?: boolean;
   proposalIds?: string[];
   context?: string[];
+  source?: 'user' | 'ai' | 'fallback';
+  model?: string;
+  /** the request failed; text holds the reason */
+  failed?: boolean;
   at: number;
 }
 
@@ -114,8 +124,18 @@ export interface Asset {
   byId: string;
   uses: number;
   uploading?: number;
+  failed?: string;
+  mime?: string;
+  url?: string;
+  bytes?: number;
+  width?: number;
+  height?: number;
+  projectIds?: string[];
 }
 
 export interface Activity { id: string; whoId: string; text: string; projectId?: string; at: number; kind: 'muse' | 'edit' | 'publish' | 'comment' | 'create' }
+
+export interface Version { id: string; number: number; kind: 'create' | 'edit' | 'muse' | 'restore' | 'publish' | 'duplicate'; label: string; byId: string; at: number; restoredNumber?: number }
+export interface PublishRecord { id: string; number: number; status: 'queued' | 'building' | 'deploying' | 'live' | 'failed' | 'superseded' | 'unpublished'; url?: string; slug: string; adapter: string; error?: string; log: { step: string; at: number; ok: boolean }[]; at: number; finishedAt?: number; byId: string; versionNumber?: number }
 
 export interface Toast { id: string; text: string; tone: 'neutral' | 'success' | 'muse' | 'error'; action?: { label: string; run: () => void } }
