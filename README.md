@@ -1,21 +1,39 @@
-# ÆTHER — Stage 02 interactive frontend prototype
+# ÆTHER
 
-The scroll-driven story site and the creative workspace behind it, in one React app.
-Frontend only: every project, asset, comment and Muse proposal is mocked in local state.
-No backend, database, authentication, real AI, payments or deployment infrastructure.
+A cinematic story site and the creative workspace behind it, in one React app, now with a real backend:
+accounts, workspaces and roles, projects and version history in Postgres, Muse (AI) proposals that
+only apply when a person accepts them, private file uploads and real publishing.
 
-**Live:** https://aether-delta-lime.vercel.app (Vercel, deploys automatically from `main`)
+| | |
+| --- | --- |
+| **Production** (`main`) | https://aether-delta-lime.vercel.app — the approved Stage 02 frontend. Not connected to the backend yet. |
+| **Staging** (`stage-03-backend`) | https://aether-git-stage-03-backend-himanshus-projects-9c98f610.vercel.app — the full backend-connected app. Vercel sign-in required to open it. |
+| Approved Stage 02 snapshot | branch `release/stage-02-approved` |
+
+Documentation:
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — technology choices, database, API, auth, permissions, Muse, storage, publishing, security, costs
+- [docs/SETUP.md](docs/SETUP.md) — local setup, environment variables, migrations, deployment, provider configuration, rollback, troubleshooting
+- [docs/STATUS.md](docs/STATUS.md) — what works, what depends on outside credentials, what is not built
+- [.env.example](.env.example) — every environment variable, explained
 
 ## Run it
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+createdb aether_dev
+export DATABASE_URL=postgres://postgres@127.0.0.1:5432/aether_dev
+export AUTH_SECRET=$(openssl rand -base64 48)
+export DEV_OUTBOX=true
+npm run db:migrate
+npm run dev:api    # API on http://localhost:8787
+npm run dev        # frontend on http://localhost:5173 (proxies /api and /p)
+
+npm test           # API, permission, security, Muse, asset and publishing tests
+npm run test:e2e   # Playwright: visitor → idea → sign-up → Muse → approval → versions → upload → publish
 npm run build      # type-check + production build into dist/
-npm run preview    # serve dist/ locally
 ```
 
-Node 20+ recommended. `dist/` uses relative paths (`base: './'`), so it can be served from any folder.
+Node 20+ and a local Postgres. Details in [docs/SETUP.md](docs/SETUP.md).
 
 ### URL flags
 
@@ -54,13 +72,16 @@ Events are also written to the console as `[ÆTHER perf] …` while the overlay 
 | Hash | Screen |
 | --- | --- |
 | *(none)* | Story site: Spark → Drop → Form → Lattice → Orbit → Universe |
-| `#start` | New project flow: spark → directions → setup → forming |
+| `#start` | New project flow: spark → directions → setup → forming. Open to visitors; the account comes after the idea |
 | `#workspace` | Dashboard |
 | `#projects` | Board / list / timeline |
 | `#project-<id>` | Creative space with Design, Motion and Space modes |
 | `#launch-<id>` | Launch checks, preview and simulated publishing |
 | `#library` | Asset library |
 | `#activity`, `#brand-kit` | Activity feed, brand kit |
+| `#team`, `#account` | Members, roles and invitations; profile and password |
+| `#signin`, `#signup`, `#forgot`, `#reset-password`, `#verified`, `#join`, `#check-email` | Authentication |
+| `/p/<address>` | A published project (public) |
 
 ## Architecture
 
@@ -85,11 +106,19 @@ src/
     Workspace.tsx        shell, sidebar, mobile tabs, palette, Muse panel
     pages/               Dashboard, Projects, ProjectSpace, LaunchPage, Library, StartFlow, …
     components/          Artboard, MusePanel, CoreViewport, CommandPalette, Toaster
+    auth/Auth.tsx        sign up, sign in, confirm email, reset password, join a workspace
   data/
-    store.ts             zustand store and every mutation (projects, assets, proposals, publish)
-    muse.ts              mocked Muse: proposals, replies, directions
-    seed.ts              seed people, projects, activity, assets
+    api.ts               typed client for the AETHER API
+    session.ts           who is signed in, workspaces, roles, capabilities of this environment
+    store.ts             workspace data and every mutation; each one calls the API
+    muse.ts              rule-based engine, used only as the labelled development fallback
+    seed.ts              fictional sample data used by the marketing story only
     types.ts             domain types
+api/index.ts             the one Vercel Function (API + published pages)
+server/                  Hono app: routes/, services/ (muse, publish, storage, email, projects), auth, db, migrate
+shared/model.ts          project schemas and rules shared by browser and server
+db/migrations/           version-controlled SQL migrations
+tests/                   api.test.ts (Vitest) and e2e/ (Playwright)
   lib/
     quality.ts           Full / Lite / Still detection and overrides
     perf.ts              diagnostics event log and renderer facts (overlay in components/PerfOverlay.tsx)
@@ -108,16 +137,15 @@ src/
 
 A running PerformanceMonitor downgrades Full → Lite, then caps Lite's DPR at 1.
 
-## What is mocked, and where real services plug in
+## What is real
 
-| Area | Now | Integration point |
-| --- | --- | --- |
-| Data | Seeded zustand store, in memory | Replace actions in `data/store.ts` with API calls; types in `data/types.ts` are the contract |
-| Muse | Keyword-based proposals and scripted streaming replies | `data/muse.ts` (`generateProposals`, `museReply`, `directionsFor`). Proposals always go through accept / reject; nothing auto-applies |
-| Uploads | Object URLs with simulated progress | `addAsset` / `updateAsset` in the store |
-| Publishing | Four timed steps, fake `<domain>.aether.site` URL | `startPublish` in the store |
-| Sign-in | Nav button only, no auth | — |
-| Email in setup | Format validation only | — |
+Everything in the workspace reads and writes through the API: accounts and sessions, workspaces and
+roles, projects, versions, comments, activity, Muse conversations and proposals, assets, launch checks
+and publishing. The marketing story still shows fictional sample projects by design.
+
+Three things depend on credentials that are not configured yet (email delivery, Google sign-in, custom
+publish domains) and Muse needs AI Gateway to be unlocked; [docs/STATUS.md](docs/STATUS.md) lists exactly what is needed.
+Where something is not available the app says so; it never pretends.
 
 ### Headline refraction
 
@@ -137,12 +165,14 @@ and controls that would otherwise appear on hover stay visible.
 
 ## Security and privacy
 
-- No API keys, tokens, credentials or environment variables are used or needed. `.env*` files are
-  git-ignored in case integrations are added later; keep secrets in the hosting provider's settings.
-- No analytics, cookies or third-party requests. Fonts, images and the 3D environment ship with
-  the app. `localStorage` holds only the visitor's Motion tier choice and `sessionStorage` only a
-  "preloader already seen" flag.
-- All people, clients and projects in `src/data/seed.ts` are fictional.
+- No secrets in the repository. Every credential is a server-side environment variable set in the
+  hosting provider; `.env*` files are git-ignored and `.env.example` holds names only. The frontend
+  reads no environment variables.
+- One first-party, httpOnly session cookie. No analytics or third-party requests from the frontend.
+  `localStorage` holds the visitor's Motion tier choice and, while signing up part-way through
+  starting a project, that pending project; `sessionStorage` holds a "preloader already seen" flag.
+- Security model, permissions and upload rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#10-security).
+- All people, clients and projects in `src/data/seed.ts` are fictional and only appear in the marketing story.
 - Third-party licences and attributions: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - No licence has been chosen for this repository yet, so default copyright applies.
 

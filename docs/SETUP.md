@@ -55,7 +55,9 @@ Vercel settings: framework Vite, build command `npm run build:deploy`, output `d
 | `DEV_OUTBOX` | `true` (until an email key is added) |
 | `BLOB_READ_WRITE_TOKEN` | token of the private Blob store `aether-staging-assets` |
 
-Muse uses AI Gateway through the deployment's own identity; no key.
+| `MUSE_PROVIDER` | `fallback`, temporarily: AI Gateway refuses requests until a card is on file. Delete it to use the real model |
+
+Without `MUSE_PROVIDER`, Muse uses AI Gateway through the deployment's own identity; no key is stored. `GET /api/muse/selftest` (staging and local only) makes one tiny real request and reports what the provider answered.
 
 ### Production cutover (not done; needs approval)
 

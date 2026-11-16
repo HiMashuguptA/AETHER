@@ -20,7 +20,7 @@ Updated 17 November 2026. Branch `stage-03-backend`; production is untouched.
 
 | Capability | State on staging | What is needed |
 | --- | --- | --- |
-| Muse with a real model | See "Staging results" in the README for what the gateway returned | Vercel AI Gateway free credit covers free-tier models only; other models need purchased credits |
+| Muse with a real model | Blocked by the provider, so staging runs the labelled development fallback for now (`MUSE_PROVIDER=fallback` on Preview). The gateway accepted the deployment's identity but answered: "AI Gateway requires a valid credit card on file to service requests". The real-model path is covered by tests with a stand-in provider but has not yet answered a live request | In Vercel → AI Gateway, add a card to unlock the free monthly credit (or set another provider's key). Then delete `MUSE_PROVIDER` from the Preview variables, redeploy, and open `/api/muse/selftest`, which should say `"ok": true` |
 | Email delivery (confirmation, password reset, invitations) | Not delivered. Confirmation links are shown on the staging confirm screen, labelled; invitation links are shown to the admin; password reset cannot complete | A Resend API key and a verified sending domain |
 | Google sign-in | Hidden | A Google OAuth client id and secret |
 | `name.aether.site` addresses | Not available; adapter refuses and lists what is missing | A registered domain, wildcard DNS, the wildcard domain on the hosting project, and one routing rule |
