@@ -6,7 +6,7 @@ export interface SessionUser { id: string; name: string; email: string; emailVer
 export interface WorkspaceRef { id: string; name: string; slug: string; role: Role; members: number }
 export interface Capabilities {
   environment: string;
-  muse: { provider: string; real: boolean };
+  muse: { provider: string; label?: string; real: boolean };
   email: { delivery: 'resend' | 'dev-outbox' | 'none'; verificationRequired: boolean };
   google: boolean;
   storage: string;

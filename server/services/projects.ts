@@ -32,7 +32,7 @@ export function toClient(p: ProjectRow, extra: { teamIds?: string[]; comments?: 
   };
 }
 
-export const commentToClient = (c: any) => ({ id: c.id, authorId: c.author_id, text: c.body, at: new Date(c.created_at).getTime(), target: c.target, resolved: !!c.resolved_at });
+export const commentToClient = (c: any) => ({ id: c.id, authorId: c.author_id ?? 'former-member', text: c.body, at: new Date(c.created_at).getTime(), target: c.target, resolved: !!c.resolved_at });
 
 export const snapshotOf = (p: Pick<ProjectRow, 'name' | 'description' | 'stage' | 'doc' | 'motion' | 'space'>): Snapshot => ({ name: p.name, description: p.description, stage: p.stage as Snapshot['stage'], doc: p.doc, motion: p.motion, space: p.space });
 

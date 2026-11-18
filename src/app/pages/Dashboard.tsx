@@ -6,6 +6,8 @@ import { stageWide, stageImage } from '../../data/assets';
 import { navigate } from '../../lib/router';
 import { Button } from '../../components/Button';
 import { Avatar, AvatarStack, StageBadge, timeAgo, formatDate, personById, EmptyState } from '../components/bits';
+import { ExampleProjectButton } from '../components/ExampleProject';
+import { roleCan, useRole } from '../../data/session';
 import SpotlightCard from '../../components/reactbits/SpotlightCard';
 import { STAGE_LABEL } from '../../lib/tokens';
 
@@ -17,6 +19,7 @@ function greeting() {
 const ICON = { muse: Sparkle, edit: PencilSimple, publish: RocketLaunch, comment: ChatCircle, create: Plus };
 
 export default function Dashboard() {
+  const canStart = roleCan(useRole(), 'editor');
   const firstName = useSession((s) => (s.user?.name ?? '').split(' ')[0] || 'there');
   const projects = useApp((s) => s.projects);
   const activity = useApp((s) => s.activity);
@@ -108,7 +111,7 @@ export default function Dashboard() {
           <h2 id="dash-projects" className="text-xl font-normal text-mist">Projects</h2>
           <button onClick={() => navigate('projects', { transition: false })} className="text-sm text-text-3 hover:text-mist">View all</button>
         </div>
-        {sorted.length === 0 && <div className="mt-4"><EmptyState title="No projects yet" body="Describe an idea and Muse will propose three directions to start from." action={<Button variant="primary" onClick={() => navigate('start', { transition: false })}>Start your first project</Button>} /></div>}
+        {sorted.length === 0 && <div className="mt-4"><EmptyState title="No projects yet" body="Describe an idea and Muse will propose three directions to start from, or open a finished example to see how a project fits together." action={<div className="flex flex-wrap justify-center gap-2"><Button variant="primary" onClick={() => navigate('start', { transition: false })}>Start your first project</Button>{canStart ? <ExampleProjectButton /> : null}</div>} /></div>}
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
           {sorted.map((p) => (
             <button key={p.id} onClick={() => navigate(`project-${p.id}`, { transition: false })} className="group text-left" data-cursor="Open">

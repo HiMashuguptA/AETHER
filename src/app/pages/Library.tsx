@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useMemo, useRef, useState } from 'react';
 import { MagnifyingGlass, UploadSimple, X, Cube, Drop, Image as ImageIcon, FilmStrip, SquaresFour, Plus, Check, Trash, DownloadSimple, WarningCircle, File as FileIcon } from '@phosphor-icons/react';
 import { useApp } from '../../data/store';
 import { roleCan, useRole } from '../../data/session';
@@ -6,6 +6,10 @@ import type { Asset, AssetKind } from '../../data/types';
 import { Button } from '../../components/Button';
 import { Segmented, EmptyState, Avatar, timeAgo, personById } from '../components/bits';
 import CoreViewport from '../components/CoreViewport';
+
+// three's GLTF loader only loads when someone opens a model
+const GlbViewer = lazy(() => import('../components/GlbViewer'));
+const isGlb = (a: Asset) => a.kind === '3d' && !!a.url && (/gltf-binary/.test(a.mime ?? '') || /\.glb$/i.test(a.name));
 import { STAGES } from '../../lib/tokens';
 
 type Filter = 'all' | AssetKind;
@@ -145,6 +149,8 @@ export default function Library() {
             <div className="mt-4 aspect-square overflow-hidden rounded-2xl border border-hairline">
               {current.kind === '3d' && current.stage ? (
                 <CoreViewport morph={Math.max(1, Math.min(4, STAGES.indexOf(current.stage)))} className="h-full w-full" label={`${current.name}, interactive. Drag to orbit.`} />
+              ) : isGlb(current) && !current.failed ? (
+                <Suspense fallback={<Thumb a={current} big />}><GlbViewer url={current.url!} label={`${current.name}, 3D preview. Drag to orbit.`} /></Suspense>
               ) : (
                 <Thumb a={current} big />
               )}

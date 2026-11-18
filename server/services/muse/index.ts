@@ -4,6 +4,7 @@ import { env } from '../../env.js';
 import { ApiError } from '../../lib/http.js';
 import type { ProjectRow } from '../../lib/access.js';
 import { activeProvider, ProviderError, type ModelProvider } from './providers.js';
+import { brandFor, type Brand } from '../brand.js';
 import { directionsFor, generateProposals, museReply } from '../../../src/data/muse.js';
 import { ChangeSchema, DirectionSchema, EASINGS, HEADLINE_SIZES, InterpretationSchema, LAYERS, STAGES, THEMES, currentValue, describeValue, type Change, type DirectionT, type InterpretationT } from '../../../shared/model.js';
 
@@ -51,15 +52,17 @@ const DIRECTIONS_SCHEMA = strict({
   },
 });
 
-const FIELDS = `Fields you may propose changes to (anything else is rejected):
+const FIELDS = `When the project has a brandKit, keep proposals consistent with it: its accent and palette for colour, its voice for copy.
+Fields you may propose changes to (anything else is rejected):
 scope "doc": headline (string, \\n for a line break), subhead (string), cta (string, at most 4 words), proof (string), nav (array of up to 6 short strings), accent (hex), headlineSize (one of ${HEADLINE_SIZES.join(', ')}), subheadTone (hex; keep contrast high on the theme), radius (0 to 40), spacing (8 to 64), align ("left" or "center"), theme (${THEMES.join(', ')}), visual (the 3D form: ${STAGES.join(', ')}).
 scope "motion" (set track to the layer: ${LAYERS.filter((l) => l !== 'background').join(', ')}): start (seconds 0 to 4), duration (0.1 to 4), easing (${EASINGS.join(', ')}), fromY (px the layer travels in from), fromBlur (px 0 to 40).
 scope "space" (the 3D Core material and light): morph (0 spark, 1 drop, 2 form, 3 lattice, 4 orbit), roughness (0 to 1), violet, cobalt, key (light intensities 0 to 3), spin (0 to 2), film (iridescence 0 to 3).
 Propose one to four changes that answer the request. Do not propose a value equal to the current one. If the request needs nothing changed, return no proposals and say so.`;
 
-function projectContext(p: ProjectRow, comments: { body: string; target: string }[]) {
+function projectContext(p: ProjectRow, comments: { body: string; target: string }[], brand: Brand | null) {
   return JSON.stringify({
     name: p.name, client: p.client, description: p.description, stage: p.stage, outputs: p.outputs,
+    brandKit: brand ? { name: brand.name, accent: brand.accent, palette: brand.palette, typeface: brand.typeface, voice: brand.voice.slice(0, 400) } : null,
     creativeDirection: p.direction ? { name: p.direction.name, summary: p.direction.summary, motion: p.direction.motion } : null,
     design: p.doc, motion: p.motion.map((t: any) => ({ layer: t.id, start: t.start, duration: t.duration, easing: t.easing, fromY: t.fromY, fromBlur: t.fromBlur })), space: p.space,
     openComments: comments.slice(-8).map((c) => ({ on: c.target, text: c.body.slice(0, 240) })),
@@ -97,6 +100,7 @@ async function callModel<T>(provider: ModelProvider, who: Who, feature: string, 
   let inTok = 0;
   let outTok = 0;
   let user = req.user;
+  let lastStatus: number | undefined;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const res = await provider.complete({ ...req, user, signal: AbortSignal.timeout(env.museTimeoutMs) });
@@ -116,14 +120,16 @@ async function callModel<T>(provider: ModelProvider, who: Who, feature: string, 
       const timeout = e.name === 'TimeoutError' || e.name === 'AbortError';
       status = timeout ? 'timeout' : 'error';
       lastError = e.message;
+      lastStatus = err instanceof ProviderError ? err.status : undefined;
       if (!(timeout || (err instanceof ProviderError && err.retryable))) break;
-      await new Promise((r) => setTimeout(r, 400 * attempt));
+      await new Promise((r) => setTimeout(r, (lastStatus === 429 ? 1500 : 400) * attempt));
     }
   }
   await track(who, feature, provider, { inTok, outTok, ms: Date.now() - started, attempts: 2, status, error: lastError });
   console.error(`[muse] ${feature} failed (${status}): ${lastError.slice(0, 200)}`);
   if (status === 'timeout') throw new ApiError(504, 'muse_timeout', 'Muse took too long to answer. Nothing was changed. Try again.');
   if (status === 'invalid_output') throw new ApiError(502, 'muse_invalid', 'Muse returned a suggestion that did not pass validation, so it was discarded. Try rephrasing.');
+  if (lastStatus === 429) throw new ApiError(429, 'muse_busy', 'Muse has used its AI allowance for the moment. Nothing was changed. Try again in a few minutes.');
   throw new ApiError(502, 'muse_unavailable', 'Muse could not be reached. Nothing was changed. Try again in a moment.');
 }
 
@@ -163,11 +169,12 @@ export async function proposeForProject(p: ProjectRow, prompt: string, context: 
     await track(who, 'proposals', null, { ms: 0, attempts: 1, status: 'ok' });
     return { reply: museReply(p as any, prompt, drafts.length), drafts, source: 'fallback', model: null };
   }
-  const [history, comments] = await Promise.all([
+  const [history, comments, brand] = await Promise.all([
     q<{ role: string; body: string }>(`select m.role, m.body from muse_messages m join muse_conversations c on c.id = m.conversation_id where c.project_id = $1 and c.kind = 'project' order by m.created_at desc limit 8`, [p.id]),
     q<{ body: string; target: string }>(`select body, target from comments where project_id = $1 and resolved_at is null order by created_at`, [p.id]),
+    brandFor(p.workspace_id),
   ]);
-  const user = `<project>${projectContext(p, comments)}</project>
+  const user = `<project>${projectContext(p, comments, brand)}</project>
 <conversation>${JSON.stringify(history.reverse().map((m) => ({ from: m.role === 'muse' ? 'muse' : 'person', text: m.body.slice(0, 500) })))}</conversation>
 <request focus="${context.join(', ').replace(/[<>"]/g, '').slice(0, 200)}">${prompt.replace(/[<>]/g, '').slice(0, 2000)}</request>
 

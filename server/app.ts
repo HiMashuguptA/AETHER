@@ -6,6 +6,7 @@ import { one } from './db.js';
 import { capabilities } from './env.js';
 import { ApiError } from './lib/http.js';
 import { assets } from './routes/assets.js';
+import { extras } from './routes/extras.js';
 import { muse } from './routes/muse.js';
 import { projects } from './routes/projects.js';
 import { publicSites, publish } from './routes/publish.js';
@@ -70,6 +71,7 @@ api.route('/', projects);
 api.route('/', muse);
 api.route('/', assets);
 api.route('/', publish);
+api.route('/', extras);
 app.route('/api', api);
 app.route('/', publicSites);
 

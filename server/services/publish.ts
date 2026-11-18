@@ -72,7 +72,9 @@ export function buildSite(s: Snapshot, opts: { client: string; number: number })
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title} · ${esc(opts.client || s.name)}</title>
 <meta name="description" content="${esc(d.subhead.slice(0, 300))}">
-<meta property="og:title" content="${title}"><meta property="og:description" content="${esc(d.subhead.slice(0, 300))}">
+<meta property="og:type" content="website"><meta property="og:title" content="${title}"><meta property="og:description" content="${esc(d.subhead.slice(0, 300))}">
+<meta name="twitter:card" content="summary"><meta name="theme-color" content="${theme.bg}">
+<link rel="icon" href="data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='${theme.bg}'/><circle cx='32' cy='32' r='17' fill='${accent}'/></svg>`)}">
 <meta name="generator" content="AETHER build ${opts.number}">
 <style>
 *{box-sizing:border-box;margin:0}html,body{height:100%}

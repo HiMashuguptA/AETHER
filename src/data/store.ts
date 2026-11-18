@@ -85,6 +85,9 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>();
 const pending = new Map<string, Record<string, unknown>>();
 const chains = new Map<string, Promise<void>>();
 
+/** True while this tab holds edits the server has not confirmed yet; live refresh waits for them. */
+export const hasUnsavedEdits = (id: string) => pending.has(id) || timers.has(id) || useApp.getState().saveState[id] === 'saving';
+
 export const useApp = create<AppState>((set, get) => {
   const me = () => useSession.getState().user?.id ?? '';
   const fail = (e: unknown) => get().toast({ text: errorText(e), tone: 'error' });

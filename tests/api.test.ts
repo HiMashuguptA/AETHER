@@ -268,7 +268,7 @@ describe('projects and versions', () => {
 });
 
 describe('Muse', () => {
-  const fake = (json: unknown | (() => unknown)): ModelProvider => ({ name: 'fake', model: 'fake-1', priceIn: 1e-6, priceOut: 2e-6, complete: async () => ({ json: typeof json === 'function' ? (json as () => unknown)() : json, inputTokens: 1000, outputTokens: 200 }) });
+  const fake = (json: unknown | (() => unknown)): ModelProvider => ({ name: 'fake', label: 'Fake', model: 'fake-1', priceIn: 1e-6, priceOut: 2e-6, complete: async () => ({ json: typeof json === 'function' ? (json as () => unknown)() : json, inputTokens: 1000, outputTokens: 200 }) });
   afterAll(() => setProviderForTests(undefined));
 
   it('labels the development fallback and never presents it as a model', async () => {
@@ -356,7 +356,7 @@ describe('Muse', () => {
   });
 
   it('reports provider failures and timeouts as failures, without inventing a reply', async () => {
-    setProviderForTests({ name: 'fake', model: 'down', priceIn: 0, priceOut: 0, complete: async () => { throw Object.assign(new Error('timed out'), { name: 'TimeoutError' }); } });
+    setProviderForTests({ name: 'fake', label: 'Fake', model: 'down', priceIn: 0, priceOut: 0, complete: async () => { throw Object.assign(new Error('timed out'), { name: 'TimeoutError' }); } });
     const { c, ws } = await newUser();
     const p = await newProject(c, ws);
     const r = await c.post(`/api/projects/${p.id}/muse`, { prompt: 'bigger', context: [] });

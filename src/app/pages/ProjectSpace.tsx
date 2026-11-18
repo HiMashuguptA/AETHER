@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { PresenceStack, usePresence } from '../components/Presence';
 import {
   ArrowLeft, Sparkle, RocketLaunch, PaintBrush, FilmStrip, Cube, Eye, EyeSlash, Lock, LockOpen, Play, Pause,
   Desktop, DeviceTablet, DeviceMobile, ChatCircle, Stack, TextAa, Cursor, Image as ImageIcon, Rows, Square, ArrowCounterClockwise, CheckCircle, Sliders, ClockCounterClockwise,
@@ -404,6 +405,7 @@ export default function ProjectSpace({ id }: { id: string }) {
   const canEdit = roleCan(useRole(), 'editor');
   const saveState = useApp((s) => s.saveState[id]);
   const loadMuse = useApp((s) => s.loadMuse);
+  const here = usePresence(id, mode);
   const exists = !!project;
   // the Muse conversation and proposals are stored with the project
   useEffect(() => { if (exists) void loadMuse(id); }, [id, exists, loadMuse]);
@@ -509,7 +511,7 @@ export default function ProjectSpace({ id }: { id: string }) {
         ]}
       />
       <div className="flex items-center gap-2">
-        <span className="hidden items-center gap-2 lg:flex tablet-portrait:hidden"><AvatarStack ids={project.teamIds} size={26} /></span>
+        <span className="hidden items-center gap-2 lg:flex tablet-portrait:hidden"><PresenceStack here={here} teamIds={project.teamIds} /></span>
         <span className="hidden min-w-[64px] text-xs sm:inline" role="status" aria-live="polite">
           {!canEdit ? <span className="text-text-3">View only</span> : saveState === 'saving' ? <span className="text-text-3">Saving…</span> : saveState === 'error' ? <span className="text-red-400">Not saved</span> : <span className="flex items-center gap-1 text-text-4"><CheckCircle size={12} />Saved</span>}
         </span>

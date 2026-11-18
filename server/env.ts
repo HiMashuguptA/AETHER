@@ -25,26 +25,42 @@ export const env = {
   get emailFrom() { return e('EMAIL_FROM') || 'AETHER <onboarding@resend.dev>'; },
   /** Staging only: show verification and reset links in the app when no email provider is set. Ignored in production. */
   get devOutbox() { return e('DEV_OUTBOX') === 'true' && !this.isProduction; },
-  get requireEmailVerification() { return e('AUTH_REQUIRE_EMAIL_VERIFICATION') !== 'false'; },
+  /**
+   * Sign-up asks people to confirm their email only when an email can actually reach them
+   * (a provider is configured, or the staging outbox is on). Set to 'true' or 'false' to override.
+   */
+  get requireEmailVerification() {
+    const v = e('AUTH_REQUIRE_EMAIL_VERIFICATION');
+    if (v === 'false') return false;
+    if (v === 'true') return true;
+    return !!this.resendKey || this.devOutbox || this.stage === 'test';
+  },
 
   // --- Google sign-in (optional) ---
   get googleId() { return e('GOOGLE_CLIENT_ID'); },
   get googleSecret() { return e('GOOGLE_CLIENT_SECRET'); },
 
   // --- Muse ---
-  /** 'gateway' (Vercel AI Gateway), 'openai' (any OpenAI-compatible API), 'anthropic', or 'fallback' */
+  /**
+   * 'groq' or 'gemini' (free tiers, need only a free API key), 'openai' (any OpenAI-compatible API),
+   * 'anthropic', 'gateway' (Vercel AI Gateway), or 'fallback'. Unset: the first key found decides.
+   */
   get museProvider() {
     const p = e('MUSE_PROVIDER');
     if (p) return p;
-    if (e('AI_GATEWAY_API_KEY') || e('VERCEL')) return 'gateway';
+    if (e('GROQ_API_KEY')) return 'groq';
+    if (e('GEMINI_API_KEY')) return 'gemini';
     if (e('ANTHROPIC_API_KEY')) return 'anthropic';
     if (e('OPENAI_API_KEY')) return 'openai';
+    if (e('AI_GATEWAY_API_KEY')) return 'gateway';
     return 'fallback';
   },
   get museModel() { return e('MUSE_MODEL'); },
   get museBaseUrl() { return e('MUSE_BASE_URL'); },
   get gatewayKey() { return e('AI_GATEWAY_API_KEY'); },
   get openaiKey() { return e('OPENAI_API_KEY'); },
+  get groqKey() { return e('GROQ_API_KEY'); },
+  get geminiKey() { return e('GEMINI_API_KEY'); },
   get anthropicKey() { return e('ANTHROPIC_API_KEY'); },
   get museTimeoutMs() { return Number(e('MUSE_TIMEOUT_MS')) || 25000; },
   /** Hard stops on spend, in USD. */
@@ -61,11 +77,13 @@ export const env = {
   get publishAdapter() { return e('PUBLISH_ADAPTER') || 'builtin'; },
 };
 
+const MUSE_LABELS: Record<string, string> = { groq: 'Groq', gemini: 'Google Gemini', openai: 'OpenAI compatible', anthropic: 'Anthropic', gateway: 'Vercel AI Gateway' };
+
 /** What is switched on in this environment; safe to send to the browser. */
 export function capabilities() {
   return {
     environment: env.stage,
-    muse: { provider: env.museProvider, real: env.museProvider !== 'fallback' },
+    muse: { provider: env.museProvider, label: MUSE_LABELS[env.museProvider] ?? 'Development fallback', real: env.museProvider !== 'fallback' },
     email: { delivery: env.resendKey ? 'resend' : env.devOutbox ? 'dev-outbox' : 'none', verificationRequired: env.requireEmailVerification },
     google: !!(env.googleId && env.googleSecret),
     storage: env.storageProvider,

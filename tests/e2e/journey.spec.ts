@@ -159,3 +159,54 @@ test('visitor → idea → registration → workspace → Muse → approval → 
   await page.waitForURL(/#workspace$/);
   await expect(page.getByText('Halden Spring').first()).toBeVisible();
 });
+
+test('final touches: example project, brand kit, presence, export, account deletion', async ({ page, browser }) => {
+  const email = `e2e-touch-${Date.now().toString(36)}@example.test`;
+  await page.goto('/?tier=still#signup');
+  await signUpThroughUi(page, 'Ines Touch', email);
+  await page.waitForURL(/#workspace$/);
+
+  // an empty workspace offers a ready-made example, which opens as an ordinary project
+  await page.getByRole('button', { name: 'Open an example' }).click();
+  await page.waitForURL(/#project-/);
+  await expect(page.getByText('Example · Halden Coffee spring launch').first()).toBeVisible();
+  const projectId = page.url().split('#project-')[1];
+
+  // the brand kit saves and comes back after a reload
+  await page.goto('/?tier=still#brand-kit');
+  await page.getByLabel('Brand name').fill('Halden');
+  await page.getByLabel('Voice').fill('Warm, plain, specific.');
+  await page.getByRole('button', { name: 'Save brand kit' }).click();
+  await expect(page.getByText('Brand kit saved.')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Brand name')).toHaveValue('Halden');
+
+  // a teammate opening the same project shows up as here now
+  const invite = await page.request.post(`/api/workspaces/${(await (await page.request.get('/api/me')).json()).workspaces[0].id}/invitations`, { data: { email: `e2e-mate-${Date.now().toString(36)}@example.test`, role: 'editor' }, headers: { origin: new URL(page.url()).origin } });
+  const link: string = (await invite.json()).link;
+  const mate = await browser.newPage();
+  await mate.goto('/?tier=still#signup');
+  const mateEmail = (await invite.json()).invitation.email;
+  await signUpThroughUi(mate, 'Kofi Mate', mateEmail);
+  await mate.waitForURL(/#workspace$/);
+  await mate.goto(link.replace(/^https?:\/\/[^/]+/, ''));
+  await mate.getByRole('button', { name: 'Accept invitation' }).click();
+  await mate.waitForURL(/#workspace$/);
+  await mate.goto(`/?tier=still#project-${projectId}`);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/?tier=still#project-${projectId}`);
+  await expect(page.getByRole('status', { name: /Here now: Kofi Mate/ })).toBeVisible({ timeout: 20_000 });
+  await mate.close();
+
+  // export downloads a JSON file of the project
+  const exported = await page.request.get(`/api/projects/${projectId}/export`);
+  expect(exported.status()).toBe(200);
+  expect((await exported.json()).project.name).toBe('Example · Halden Coffee spring launch');
+
+  // the owner of a shared workspace cannot delete their account until they hand it over
+  await page.goto('/?tier=still#account');
+  await page.getByRole('button', { name: 'Delete my account…' }).click();
+  await page.getByLabel(`Type ${email} to confirm`).fill(email);
+  await page.getByRole('button', { name: 'Delete account permanently' }).click();
+  await expect(page.getByText(/Make someone else the owner/)).toBeVisible();
+});

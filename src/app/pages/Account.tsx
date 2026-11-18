@@ -87,11 +87,49 @@ export default function Account() {
         </form>
       )}
 
+      <DangerZone email={user.email} />
+
       <form onSubmit={createWs} className="card mt-4 flex flex-col gap-4 p-5">
         <h2 className="text-base font-medium text-mist">New workspace</h2>
         <Field label="Name" hint="A separate space with its own projects, library and members. You will be its owner."><input value={newWs} onChange={(e) => setNewWs(e.target.value)} maxLength={80} placeholder="Client work" className={INPUT} /></Field>
         <Button type="submit" className="self-start" loading={busy === 'newws'} disabled={busy === 'newws' || !newWs.trim()}>Create workspace</Button>
       </form>
     </div>
+  );
+}
+
+/** Deleting the account removes workspaces only this person uses; shared ones must be handed over first. */
+function DangerZone({ email }: { email: string }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setError('');
+    try {
+      await api('POST', '/me/delete', { confirmEmail: typed.trim() });
+      useSession.setState({ status: 'anon', user: null, workspaces: [], workspaceId: null });
+      navigate('#');
+    } catch (err) { setError(err instanceof ApiFail ? err.message : errorText(err)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <section className="card mt-4 flex flex-col gap-4 border-red-500/30 p-5" aria-labelledby="danger">
+      <h2 id="danger" className="text-base font-medium text-mist">Delete account</h2>
+      <p className="text-sm leading-6 text-text-3">Deletes your account and every workspace only you belong to, with its projects, uploads and published pages. Work you made in shared workspaces stays with those teams, credited to a former member. Export anything you want to keep first, from the project menu.</p>
+      {!open ? (
+        <Button variant="secondary" className="self-start text-red-400" onClick={() => setOpen(true)}>Delete my account…</Button>
+      ) : (
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          <Field label={`Type ${email} to confirm`}><input value={typed} onChange={(e) => { setTyped(e.target.value); setError(''); }} autoComplete="off" spellCheck={false} className={INPUT} autoFocus /></Field>
+          {error ? <p className="text-sm text-red-400" role="alert">{error}</p> : null}
+          <div className="flex gap-2">
+            <Button type="submit" variant="primary" className="!bg-red-500 !text-white" loading={busy} disabled={busy || typed.trim().toLowerCase() !== email.toLowerCase()}>Delete account permanently</Button>
+            <Button type="button" variant="tertiary" onClick={() => { setOpen(false); setTyped(''); setError(''); }}>Cancel</Button>
+          </div>
+        </form>
+      )}
+    </section>
   );
 }

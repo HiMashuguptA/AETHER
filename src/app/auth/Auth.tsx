@@ -233,6 +233,7 @@ function Forgot() {
         </div>
       ) : (
         <form onSubmit={submit} className="flex flex-col gap-5" noValidate>
+          {delivery === 'none' ? <p className="rounded-2xl border border-yellow-500/40 bg-yellow-500/[0.06] p-3 text-sm leading-6 text-text-2">Reset links are sent by email, and email is not switched on for this site yet. If you are signed in on another device, you can change your password from Account.</p> : null}
           <Field label="Email"><input type="email" autoComplete="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }} className={INPUT} autoFocus /></Field>
           <ErrorLine text={error} />
           <Button type="submit" variant="primary" size="lg" loading={busy} disabled={busy}>Send reset link</Button>

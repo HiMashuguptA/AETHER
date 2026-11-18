@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Kanban, ListBullets, ChartBar, MagnifyingGlass, Plus, CaretUp, CaretDown, DotsThree, CopySimple, Trash } from '@phosphor-icons/react';
+import { Kanban, ListBullets, ChartBar, MagnifyingGlass, Plus, CaretUp, CaretDown, DotsThree, CopySimple, Trash, DownloadSimple } from '@phosphor-icons/react';
 import { roleCan, useRole } from '../../data/session';
 import { useApp } from '../../data/store';
 import { navigate } from '../../lib/router';
@@ -34,6 +34,7 @@ function MoveMenu({ p }: { p: Project }) {
           ))}
           <div className="my-1 h-px bg-hairline" />
           <button role="menuitem" onClick={() => { setOpen(false); void duplicate(p.id); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-text-2 hover:bg-white/[0.06] hover:text-mist"><CopySimple size={14} /> Duplicate</button>
+          <a role="menuitem" href={`/api/projects/${p.id}/export`} download onClick={() => setOpen(false)} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-text-2 hover:bg-white/[0.06] hover:text-mist"><DownloadSimple size={14} /> Export as JSON</a>
           {roleCan(role, 'admin') && (
             <button role="menuitem" onClick={() => { setOpen(false); if (window.confirm(`Delete ${p.name}? Its versions, comments and Muse history go with it${p.published ? ', and its public page stops being served' : ''}.`)) void remove(p.id); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-red-400 hover:bg-red-500/10"><Trash size={14} /> Delete</button>
           )}

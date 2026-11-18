@@ -39,8 +39,9 @@ export function getAuth(): Auth {
       },
     },
     emailVerification: {
-      sendOnSignUp: true,
-      sendOnSignIn: true,
+      // without an email provider in production there is nothing to send, and sign-up does not wait for it
+      sendOnSignUp: env.requireEmailVerification || !!env.resendKey,
+      sendOnSignIn: env.requireEmailVerification,
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
         await sendEmail({ to: user.email, kind: 'verify', subject: 'Confirm your email for AETHER', url, lead: 'Confirm this address to finish creating your AETHER account.' });
