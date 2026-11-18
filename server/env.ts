@@ -47,7 +47,7 @@ export const env = {
    */
   get museProvider() {
     const p = e('MUSE_PROVIDER');
-    if (p) return p;
+    if (p && p !== 'auto') return p;
     if (e('GROQ_API_KEY')) return 'groq';
     if (e('GEMINI_API_KEY')) return 'gemini';
     if (e('ANTHROPIC_API_KEY')) return 'anthropic';
