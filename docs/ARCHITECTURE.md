@@ -92,10 +92,10 @@ Enforced in the API on every request. The UI hides or disables what a role canno
 
 ## 7. Muse
 
-`server/services/muse` exposes two operations, `exploreIdea` and `proposeForProject`, over a `ModelProvider` interface (`gateway`, `openai`-compatible, `anthropic`). Changing provider or model is an environment variable.
+`server/services/muse` exposes two operations, `exploreIdea` and `proposeForProject`, over a `ModelProvider` interface with presets for Groq and Google Gemini (both have free tiers that need only a key), any OpenAI-compatible API, Anthropic and Vercel AI Gateway. Changing provider or model is an environment variable; with `MUSE_PROVIDER=auto` the key that is present decides.
 
-- **Structured output.** The model must answer with JSON matching a schema. The answer is then validated field by field against the same Zod schema that guards saves; each proposed change must target an allowed field with an in-range value. Invalid proposals are dropped; a wholly invalid answer is retried once, then reported as a failure.
-- **Context.** The request carries the project's current design, motion and 3D settings, its stage and brief, the creative direction it was created from, open comments, the selected context chips and the last eight conversation turns, each trimmed to a fixed length.
+- **Structured output.** The model must answer with JSON matching a schema (strict JSON Schema mode; a provider that rejects it is asked for plain JSON with the schema in the prompt instead). The answer is then validated field by field against the same Zod schema that guards saves; each proposed change must target an allowed field with an in-range value. Invalid proposals are dropped; a wholly invalid answer is retried once, then reported as a failure.
+- **Context.** The request carries the project's current design, motion and 3D settings, its stage and brief, the creative direction it was created from, the workspace brand kit (name, accent, palette, typeface, voice), open comments, the selected context chips and the last eight conversation turns, each trimmed to a fixed length.
 - **Approval rule.** Muse can only create rows in `proposals`. Applying one is a separate, authenticated request by an editor: inside one transaction the project row is locked, the change is re-validated against the latest state, the project is written, a `muse` version is recorded and the proposal is marked accepted with that version. Rejecting only marks it rejected.
 - **Reliability and cost.** Timeout (25 s), one retry on transient errors, per-user and per-workspace rate limits, a daily spend cap for the workspace and for the whole environment, and a row in `ai_usage` for every call (tokens, estimated cost, latency, outcome). Admins see the totals on the Team page.
 - **Honest fallback.** With no provider configured, a rule-based engine answers and every message, proposal and direction set is stored and shown as "Development fallback · not AI". A real provider that fails is reported as a failure; the fallback is never substituted silently.
@@ -133,13 +133,23 @@ Published pages are served with a strict Content-Security-Policy (`default-src '
 
 | | Local | Staging | Production |
 | --- | --- | --- | --- |
-| App | `npm run dev` + `npm run dev:api` | Vercel preview of `stage-03-backend` (protected by Vercel login) | Vercel production from `main` |
-| Database | local Postgres | Neon project `aether-staging` | separate Neon project, created at cutover |
-| Files | local disk | Blob store `aether-staging-assets` | separate store, created at cutover |
-| Email | dev outbox | dev outbox for confirmation links only (no provider key yet) | Resend with a verified domain |
-| Muse | fallback unless a key is set | AI Gateway | AI Gateway |
+| App | `npm run dev` + `npm run dev:api` | Vercel preview of `stage-03-backend` (protected by Vercel login) | Vercel production from `main`, https://aether-delta-lime.vercel.app |
+| Database | local Postgres | Neon project `aether-staging` (Singapore) | Neon project `aether-production` (Singapore) |
+| Files | local disk | private Blob store `aether-staging-files` | private Blob store `aether-production-blob` |
+| Email | dev outbox | dev outbox, labelled (no provider key yet) | none until a Resend key and domain are set; sign-up then asks for confirmation |
+| Muse | fallback unless a key is set | `auto`: fallback until a Groq or Gemini key is added | `auto`: fallback until a Groq or Gemini key is added |
+| Cleanup | `runCleanup()` in tests | — | Vercel Cron, daily, `/api/cron/cleanup` with `CRON_SECRET` |
 
 Vercel builds run `npm run build:deploy`: forward-only migrations for that environment's database, then the build. A failed migration fails the build and changes nothing. Environment variables are scoped per environment, so preview builds can never reach production data.
+
+## 11a. Collaboration, brand kit and account features
+
+- **Presence.** An open project sends a heartbeat every 15 seconds while its tab is visible (`POST /api/projects/:id/presence`, stored in `project_presence`). The answer lists teammates seen in the last 40 seconds, what they are working in, the project's saved revision and who saved last. If the revision is newer than the tab's and the tab has no unsaved edits, the tab reloads the project and says whose changes arrived. Leaving the project removes the row at once; stale rows are cleaned daily.
+- **Brand kit.** Stored in the workspace's default design system under `tokens.brand`, validated by Zod (hex colours, at most six palette colours, short text). Editors change it; everyone in the workspace can read it; Muse receives it with each request.
+- **Export.** `GET /api/projects/:id/export` returns the project, every version snapshot and its comments as `aether.project` JSON, for any member.
+- **Account deletion.** `POST /api/me/delete` with the account's email typed as confirmation. Workspaces only this person belongs to are deleted with their files; a workspace they own that others use blocks deletion until ownership is handed over. Authorship columns are `on delete set null`, so their work in shared workspaces remains as a former member's.
+- **Cleanup.** A daily cron removes expired sessions and verification links, old rate-limit and presence rows, staging outbox mail, long-expired invitations, projects deleted more than 30 days ago, and uploads that never finished (including their stored files).
+- **Discovery.** Share card (`og.png`, rendered from the live hero), favicon, app icons and web manifest; `robots.txt` and `sitemap.xml` are generated at build time from the production address. Previews are not indexed (Vercel marks them `noindex`).
 
 ## 12. Cost
 
@@ -149,12 +159,14 @@ All figures are list prices from the providers' pricing pages in November 2026; 
 | --- | --- | --- | --- | --- | --- | --- |
 | Vercel | Hosting, functions, CDN | Hobby plan | $0 | Hobby is for personal, non-commercial use; function and transfer allowances | Launching commercially needs Pro, $20 per member per month | Low: standard Vite build + a Hono app that runs on any Node host |
 | Neon | Postgres | 100 projects, 1 GB storage and 100 compute-hours per project per month | $0 | Compute sleeps after 5 idle minutes (first request then takes about a second) | Beyond the free allowance: pay as you go, about $0.11 per compute-hour and $0.35 per GB-month | Low: plain Postgres, `pg_dump` out |
-| Vercel AI Gateway | Muse | $5 of credit every 30 days on free-tier models | $0 within the credit | Free tier covers a subset of models with lower rate limits; buying credits ends the free credit | Pay as you go at provider list price, no markup. At the default model's price (about $0.10 / $0.50 per million tokens in / out) a Muse request costs roughly $0.0005 to $0.001 | Low: provider is a setting |
+| Groq | Muse (recommended) | Free plan, no card: rate limited per model (Groq's docs list about 30 requests a minute and 1,000 a day for `gpt-oss-120b`) | $0 | Limits are per organisation; Muse reports a limit instead of guessing | Only if you add a card and move to the paid tier | Low: provider is a setting |
+| Google Gemini | Muse (alternative) | Free tier for Flash models, no card | $0 | Google has cut free quotas before and no longer publishes fixed numbers; check AI Studio | Only if billing is enabled on the Google project | Low: provider is a setting |
+| Vercel AI Gateway | Muse (optional) | $5 of credit every 30 days, but a card must be on file first | $0 within the credit | Card required before any request is served | Pay as you go at provider list price | Low: provider is a setting |
 | Vercel Blob | Uploaded files | 1 GB storage included on Hobby | $0 | Shared Hobby allowances | About $0.023 per GB-month plus operations and transfer | Low: storage interface, files are plain objects |
 | Resend | Email | 3,000 emails per month, 100 per day, one domain | $0 | Needs a domain you own to send to real users | $20 per month for 50,000 | Low: one adapter |
 | Domain | `aether.site`-style addresses | — | not purchased | — | Roughly $10–40 per year depending on the name | — |
 
-Realistic total: **$0 per month for staging and private testing**. A commercial launch is **about $20 per month** (Vercel Pro) plus usage, with AI spend capped by `MUSE_DAILY_BUDGET_USD`.
+Realistic total: **$0 per month** for staging and production on the free tiers above. A commercial launch is **about $20 per month** (Vercel Pro) plus usage, with AI spend capped by `MUSE_DAILY_BUDGET_USD`.
 
 ## 13. What is real, and what still needs something from outside
 

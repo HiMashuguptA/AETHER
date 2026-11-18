@@ -6,8 +6,8 @@ only apply when a person accepts them, private file uploads and real publishing.
 
 | | |
 | --- | --- |
-| **Production** (`main`) | https://aether-delta-lime.vercel.app — the approved Stage 02 frontend. Not connected to the backend yet. |
-| **Staging** (`stage-03-backend`) | https://aether-git-stage-03-backend-himanshus-projects-9c98f610.vercel.app — the full backend-connected app. Vercel sign-in required to open it. |
+| **Production** (`main`) | https://aether-delta-lime.vercel.app — the full app: story, accounts, workspaces, projects, Muse, uploads, publishing. |
+| **Staging** (`stage-03-backend`) | https://aether-git-stage-03-backend-himanshus-projects-9c98f610.vercel.app — the same app on its own database and file store. Vercel sign-in required to open it. |
 | Approved Stage 02 snapshot | branch `release/stage-02-approved` |
 
 Documentation:
@@ -143,38 +143,14 @@ Everything in the workspace reads and writes through the API: accounts and sessi
 roles, projects, versions, comments, activity, Muse conversations and proposals, assets, launch checks
 and publishing. The marketing story still shows fictional sample projects by design.
 
-Three things depend on credentials that are not configured yet (email delivery, Google sign-in, custom
-publish domains) and Muse needs AI Gateway to be unlocked; [docs/STATUS.md](docs/STATUS.md) lists exactly what is needed.
-Where something is not available the app says so; it never pretends.
+Muse runs a clearly labelled development fallback until a free Groq or Gemini key is added (one
+environment variable, no card). Email delivery, Google sign-in and custom publish domains also wait on
+credentials; [docs/STATUS.md](docs/STATUS.md) lists exactly what each needs. Where something is not
+available the app says so; it never pretends.
 
-### Headline refraction
-
-The hero headline (and the intro lines under it) stays real DOM text: selectable, read by screen
-readers, indexed. Where the drop overlaps it, a circular CSS mask hides those glyphs and the Core's
-shader draws the same words bent by the drop's surface normals, using a texture painted from the
-browser's own word positions. Mask and shader share one circle, so the hand-over is seamless. The
-drop is placed from the measured end of the headline, so it crosses the last letters at any width.
-Off in Still mode, with `prefers-contrast: more`, forced colours, or `?nolens`.
-
-### Portrait tablets
-
-Between 768 and 1100 px wide in portrait, the project canvas uses the full width with a resizable
-panel sheet underneath (Properties, Layers, Comments, Muse, and Timeline in Motion mode). Muse rises
-from the bottom so proposals stay previewed on the canvas above. Touch screens get larger targets,
-and controls that would otherwise appear on hover stay visible.
-
-## Security and privacy
-
-- No secrets in the repository. Every credential is a server-side environment variable set in the
-  hosting provider; `.env*` files are git-ignored and `.env.example` holds names only. The frontend
-  reads no environment variables.
-- One first-party, httpOnly session cookie. No analytics or third-party requests from the frontend.
-  `localStorage` holds the visitor's Motion tier choice and, while signing up part-way through
-  starting a project, that pending project; `sessionStorage` holds a "preloader already seen" flag.
-- Security model, permissions and upload rules: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#10-security).
-- All people, clients and projects in `src/data/seed.ts` are fictional and only appear in the marketing story.
-- Third-party licences and attributions: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-- No licence has been chosen for this repository yet, so default copyright applies.
+Also built: presence and refresh when a teammate saves, an editable brand kit that Muse follows,
+interactive previews of uploaded `.glb` models, project export, account deletion, a daily cleanup job,
+an example project, and share cards.
 
 ## Known limits
 

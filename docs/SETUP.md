@@ -46,36 +46,49 @@ Staging is the Vercel preview of the `stage-03-backend` branch; production is `m
 
 Vercel settings: framework Vite, build command `npm run build:deploy`, output `dist` (all in `vercel.json`). The API is `api/index.ts`, one function, 60 s limit.
 
-### Staging (set for the Preview environment)
+### Environments
 
-| Variable | Value |
-| --- | --- |
-| `DATABASE_URL` | pooled connection string of the Neon project `aether-staging` |
-| `AUTH_SECRET` | random, 48+ characters |
-| `DEV_OUTBOX` | `true` (until an email key is added) |
-| `BLOB_READ_WRITE_TOKEN` | token of the private Blob store `aether-staging-assets` |
+| Variable | Production | Preview (staging) |
+| --- | --- | --- |
+| `DATABASE_URL` | pooled string of the Neon project `aether-production` | pooled string of the Neon project `aether-staging` |
+| `AUTH_SECRET` | its own random value | its own random value |
+| `BLOB_READ_WRITE_TOKEN` | private Blob store `aether-production-blob` | private Blob store `aether-staging-files` |
+| `CRON_SECRET` | random; Vercel Cron sends it to `/api/cron/cleanup` | not set (cron runs on production only) |
+| `MUSE_PROVIDER` | `auto` | `auto` |
+| `DEV_OUTBOX` | never set | `true` until an email key exists |
 
-| `MUSE_PROVIDER` | `fallback`, temporarily: AI Gateway refuses requests until a card is on file. Delete it to use the real model |
+With `MUSE_PROVIDER=auto`, adding `GROQ_API_KEY` or `GEMINI_API_KEY` is the only step needed to switch Muse to a real model. `GET /api/muse/selftest` (staging and local only) makes one tiny real request and reports what the provider answered.
 
-Without `MUSE_PROVIDER`, Muse uses AI Gateway through the deployment's own identity; no key is stored. `GET /api/muse/selftest` (staging and local only) makes one tiny real request and reports what the provider answered.
+The build migrates the database of the environment it builds for (`npm run build:deploy`), so production migrations happen when `main` deploys. Migrations are additive.
 
-### Production cutover (not done; needs approval)
+### Releasing a change
 
-1. Create a separate Neon project and a separate private Blob store for production.
-2. In Vercel, for the Production environment only, set `DATABASE_URL`, `AUTH_SECRET` (new value), `BLOB_READ_WRITE_TOKEN`, `RESEND_API_KEY`, `EMAIL_FROM`. Do not set `DEV_OUTBOX`.
-3. Merge `stage-03-backend` into `main`. The production build migrates the production database, then deploys.
-4. Check `/api/health`, sign up, create a project, publish.
+1. Push to `stage-03-backend`; check the preview (`/api/health`, sign up, a project, publish).
+2. Merge into `main`. The production build migrates the production database, then deploys.
+3. Check `https://aether-delta-lime.vercel.app/api/health`.
 
 ## Authentication configuration
 
-- Email: create a Resend API key, verify a sending domain, set `RESEND_API_KEY` and `EMAIL_FROM`. Until then, confirmation links are only available through the staging outbox and password-reset emails cannot be delivered.
+- Email: create a Resend API key and verify a sending domain you own in Resend, then set `RESEND_API_KEY` and `EMAIL_FROM` (for example `AETHER <hello@your-domain>`). From then on sign-up asks people to confirm their email, password reset works, and invitations are emailed. Until then production does not ask for confirmation (nothing could reach the inbox) and password reset is unavailable.
 - Google sign-in (optional): Google Cloud Console → APIs & Services → Credentials → Create OAuth client ID → Web application. Authorised redirect URI: `<app origin>/api/auth/callback/google`. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The button appears automatically.
 
 ## AI provider configuration
 
-- Default on Vercel: AI Gateway, model `anthropic/claude-haiku-5.5`. Change the model with `MUSE_MODEL` (any id from the gateway catalogue). The free monthly credit only covers free-tier models; if the chosen model is not covered, either pick one that is or add credits in Vercel → AI Gateway.
-- Another provider: `MUSE_PROVIDER=openai` with `OPENAI_API_KEY` (and `MUSE_BASE_URL` for a compatible API), or `MUSE_PROVIDER=anthropic` with `ANTHROPIC_API_KEY`.
-- Spend limits: `MUSE_DAILY_BUDGET_USD` (whole environment) and `MUSE_WORKSPACE_DAILY_BUDGET_USD`. Set `MUSE_PRICE_INPUT_PER_M` / `MUSE_PRICE_OUTPUT_PER_M` to the model's list price so the estimates are right.
+Muse works with any of these; the first key present decides when `MUSE_PROVIDER` is `auto` or unset.
+
+| Provider | Free tier | Key | Default model |
+| --- | --- | --- | --- |
+| Groq | Yes, no card | console.groq.com → API Keys → Create | `openai/gpt-oss-120b` |
+| Google Gemini | Yes, no card | aistudio.google.com → Get API key | `gemini-2.5-flash` |
+| Any OpenAI-compatible API (OpenRouter and others) | Depends | `OPENAI_API_KEY` with `MUSE_BASE_URL` | set `MUSE_MODEL` |
+| Anthropic | No | `ANTHROPIC_API_KEY` | `claude-haiku-5-5` |
+| Vercel AI Gateway | Free monthly credit, but Vercel asks for a card on file first | `MUSE_PROVIDER=gateway` (no key on Vercel) | `anthropic/claude-haiku-5.5` |
+
+To switch on a free tier: create the key yourself (never paste it into a chat), then Vercel → Project → Settings → Environment Variables → add `GROQ_API_KEY` (or `GEMINI_API_KEY`) as **Sensitive** for Production and Preview → Deployments → Redeploy. On staging, `/api/muse/selftest` should then say `"ok": true`.
+
+- Free tiers are rate limited by the provider. When a limit is hit, Muse says so and changes nothing; it never falls back to canned answers.
+- Muse asks for strict JSON Schema output. If a provider rejects that, it asks for plain JSON with the schema in the prompt instead; every answer is validated on the server either way.
+- `MUSE_MODEL` overrides the default model. Spend limits: `MUSE_DAILY_BUDGET_USD` (whole environment) and `MUSE_WORKSPACE_DAILY_BUDGET_USD`. Free usage is still costed at the provider's paid list price, so these limits keep working if billing is ever turned on for the key.
 - Usage: Team page (admins), or the `ai_usage` table.
 
 ## Storage configuration
@@ -101,9 +114,11 @@ The built-in adapter needs nothing. For `<address>.<your domain>`: register the 
 | Every API call returns 500 and the log says `AUTH_SECRET must be set` | Set `AUTH_SECRET` (32+ characters) and redeploy |
 | "This request did not come from the AETHER app" (403) | A state-changing request arrived without the app's own `Origin`. If the app is served from an extra domain, add it to `ALLOWED_ORIGINS` |
 | Signed in on one preview URL, signed out on another | Cookies belong to one host. Use the branch URL consistently; confirmation links point at it |
-| Confirmation email never arrives | No `RESEND_API_KEY`, or the sender domain is not verified. On staging use the link shown on the confirm screen |
+| Confirmation email never arrives | The sender domain is not verified in Resend. On staging use the link shown on the confirm screen |
+| Cleanup did not run | Cron runs once a day on production only and needs `CRON_SECRET`. Vercel → Project → Cron Jobs shows each run |
 | Muse answers "Development fallback" | No provider is configured for this environment (expected locally) |
-| Muse fails with a provider error | The gateway rejected the request: model not on the free tier, credit used up, or rate limited. See the function log, change `MUSE_MODEL` or add credits |
+| Muse fails with a provider error | The provider rejected the request: wrong key, unknown model, or the free tier's limit. See the function log (keys are redacted), check the key or `MUSE_MODEL`, or wait for the limit to reset |
+| "Muse has used its AI allowance for the moment" | The provider's free-tier rate limit. It resets on the provider's schedule |
 | "Muse has reached its daily usage limit" | The spend cap was hit. Raise `MUSE_DAILY_BUDGET_USD` or wait for the next day (UTC) |
 | Upload says storage is not configured | No `BLOB_READ_WRITE_TOKEN` for this environment |
 | Publishing says it is not set up | The selected adapter reports missing requirements; the message lists them |
