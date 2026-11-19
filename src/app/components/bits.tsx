@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import { people } from '../../data/seed';
+import { personById as lookupPerson } from '../../data/people';
 import { stageImage } from '../../data/assets';
 import { STAGE_LABEL, STAGE_MEANING, type Stage } from '../../lib/tokens';
 
-export const personById = (id: string) => people.find((p) => p.id === id) ?? people[0];
+export const personById = lookupPerson;
 
 export function Avatar({ id, size = 28, ring = '#0b0b0c' }: { id: string; size?: number; ring?: string }) {
   const p = personById(id);

@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { PresenceStack, usePresence } from '../components/Presence';
 import {
   ArrowLeft, Sparkle, RocketLaunch, PaintBrush, FilmStrip, Cube, Eye, EyeSlash, Lock, LockOpen, Play, Pause,
-  Desktop, DeviceTablet, DeviceMobile, ChatCircle, Stack, TextAa, Cursor, Image as ImageIcon, Rows, Square, ArrowCounterClockwise, CheckCircle, Sliders,
+  Desktop, DeviceTablet, DeviceMobile, ChatCircle, Stack, TextAa, Cursor, Image as ImageIcon, Rows, Square, ArrowCounterClockwise, CheckCircle, Sliders, ClockCounterClockwise,
 } from '@phosphor-icons/react';
 import { useApp } from '../../data/store';
+import { api, errorText } from '../../data/api';
+import { roleCan, useRole } from '../../data/session';
+import type { Version } from '../../data/types';
 import { navigate } from '../../lib/router';
 import { Button } from '../../components/Button';
 import Artboard, { type Device } from '../components/Artboard';
@@ -15,7 +19,7 @@ import { STAGES, STAGE_LABEL, type Stage } from '../../lib/tokens';
 import { stageImage } from '../../data/assets';
 
 type Mode = 'design' | 'motion' | 'space';
-type SheetTab = 'timeline' | 'properties' | 'layers' | 'comments' | 'muse';
+type SheetTab = 'timeline' | 'properties' | 'layers' | 'comments' | 'history' | 'muse';
 
 /** Portrait tablets, iPad mini to iPad Pro 12.9" held upright (matches the tablet-portrait CSS variant). */
 const TABLET_PORTRAIT = '(min-width: 768px) and (max-width: 1100px) and (orientation: portrait)';
@@ -330,6 +334,59 @@ function MobileReview({ p, view }: { p: Project; view: ReturnType<typeof applyPe
   );
 }
 
+const KIND_LABEL: Record<Version['kind'], string> = { create: 'Created', edit: 'Edit', muse: 'Muse', restore: 'Restore', publish: 'Publish', duplicate: 'Copy' };
+
+/** Every saved version of the project, newest first, with restore. */
+function HistoryPanel({ projectId, revision, canEdit }: { projectId: string; revision?: number; canEdit: boolean }) {
+  const restore = useApp((s) => s.restoreVersion);
+  const [versions, setVersions] = useState<Version[] | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState('');
+  useEffect(() => {
+    let stop = false;
+    setError('');
+    // wait for any pending save so the list includes it
+    useApp.getState().flushSaves(projectId)
+      .then(() => api<{ versions: Version[] }>('GET', `/projects/${projectId}/versions`))
+      .then((r) => { if (!stop) setVersions(r.versions); })
+      .catch((e) => { if (!stop) setError(errorText(e)); });
+    return () => { stop = true; };
+  }, [projectId, revision]);
+  if (error) return <p className="px-3 py-4 text-sm text-red-400 tablet-portrait:px-0" role="alert">{error}</p>;
+  if (!versions) return <div className="flex flex-col gap-2 px-3 tablet-portrait:px-0" aria-busy="true">{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton h-12 rounded-xl" />)}</div>;
+  return (
+    <ol className="thin-scroll flex flex-1 flex-col gap-1.5 overflow-y-auto px-3 pb-3 tablet-portrait:px-0" aria-label="Version history">
+      {versions.map((v, i) => (
+        <li key={v.id} className={`rounded-xl border p-2.5 ${i === 0 ? 'border-hairline-strong' : 'border-hairline'}`}>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-text-2">v{v.number}</span>
+            <span className={`mono-label ${v.kind === 'muse' ? 'text-violet-300' : v.kind === 'publish' ? 'text-cyan-500' : 'text-text-4'}`}>{KIND_LABEL[v.kind]}</span>
+            <span className="ml-auto text-[11px] text-text-4">{timeAgo(v.at)}</span>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-text-2">{v.label}</p>
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-[11px] text-text-4">{personById(v.byId).name.split(' ')[0]}{i === 0 ? ' · current' : ''}</span>
+            {i > 0 && canEdit && (
+              <button
+                disabled={!!busy}
+                onClick={async () => {
+                  if (!window.confirm(`Restore the design, motion and 3D settings of version ${v.number}? Your current state is kept as its own version first, so nothing is lost. The name, stage, comments and published page do not change.`)) return;
+                  setBusy(v.id);
+                  await restore(projectId, v.id);
+                  setBusy('');
+                }}
+                className="flex items-center gap-1 text-[11px] text-violet-300 hover:text-violet-200 disabled:opacity-50 touch:py-2"
+              >
+                <ArrowCounterClockwise size={11} /> {busy === v.id ? 'Restoring…' : 'Restore'}
+              </button>
+            )}
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 export default function ProjectSpace({ id }: { id: string }) {
   const project = useApp((s) => s.projects.find((p) => p.id === id));
   const allProposals = useApp((s) => s.proposals);
@@ -344,7 +401,16 @@ export default function ProjectSpace({ id }: { id: string }) {
   const [mode, setMode] = useState<Mode>('design');
   const [layer, setLayer] = useState<LayerId>('headline');
   const [device, setDevice] = useState<Device>('desktop');
-  const [panel, setPanel] = useState<'layers' | 'comments'>('layers');
+  const [panel, setPanel] = useState<'layers' | 'comments' | 'history'>('layers');
+  const canEdit = roleCan(useRole(), 'editor');
+  const saveState = useApp((s) => s.saveState[id]);
+  const loadMuse = useApp((s) => s.loadMuse);
+  const here = usePresence(id, mode);
+  const exists = !!project;
+  // the Muse conversation and proposals are stored with the project
+  useEffect(() => { if (exists) void loadMuse(id); }, [id, exists, loadMuse]);
+  // never leave with an unsaved edit in the queue
+  useEffect(() => () => { void useApp.getState().flushSaves(id); }, [id]);
   const [playToken, setPlayToken] = useState(0);
   const [time, setTime] = useState(3);
   const [playing, setPlaying] = useState(false);
@@ -445,7 +511,10 @@ export default function ProjectSpace({ id }: { id: string }) {
         ]}
       />
       <div className="flex items-center gap-2">
-        <span className="hidden items-center gap-2 lg:flex tablet-portrait:hidden"><AvatarStack ids={project.teamIds} size={26} /><span className="flex items-center gap-1 text-xs text-text-4"><span className="h-1.5 w-1.5 rounded-full bg-cyan-500" />{project.teamIds.length > 1 ? `${personById(project.teamIds[1]).name.split(' ')[0]} is here` : 'Only you'}</span></span>
+        <span className="hidden items-center gap-2 lg:flex tablet-portrait:hidden"><PresenceStack here={here} teamIds={project.teamIds} /></span>
+        <span className="hidden min-w-[64px] text-xs sm:inline" role="status" aria-live="polite">
+          {!canEdit ? <span className="text-text-3">View only</span> : saveState === 'saving' ? <span className="text-text-3">Saving…</span> : saveState === 'error' ? <span className="text-red-400">Not saved</span> : <span className="flex items-center gap-1 text-text-4"><CheckCircle size={12} />Saved</span>}
+        </span>
         <Button size="sm" variant={museOpen ? 'muse' : 'secondary'} icon={<Sparkle size={14} weight="fill" className={museOpen ? '' : 'text-violet-400'} />} onClick={() => setMuse(!museOpen)}>
           Muse{pending.length ? ` · ${pending.length}` : ''}
         </Button>
@@ -494,13 +563,21 @@ export default function ProjectSpace({ id }: { id: string }) {
     </div>
   );
 
-  const inspectorBody = (
+  const inspectorBody = canEdit ? (
     <>
       {mode === 'design' && <DesignInspector p={project} layer={layer} />}
       {mode === 'motion' && <MotionInspector p={project} layer={layer} />}
       {mode === 'space' && <SpaceInspector p={project} />}
     </>
+  ) : (
+    // viewers see the values; the API also refuses their edits
+    <div className="pointer-events-none opacity-60" aria-disabled="true">
+      {mode === 'design' && <DesignInspector p={project} layer={layer} />}
+      {mode === 'motion' && <MotionInspector p={project} layer={layer} />}
+      {mode === 'space' && <SpaceInspector p={project} />}
+    </div>
   );
+  const historyPanel = <HistoryPanel projectId={project.id} revision={project.revision} canEdit={canEdit} />;
   const inspectorTitle = mode === 'space' ? 'Space · material and light' : mode === 'motion' ? `Motion · ${layerLabel}` : layerLabel;
 
   const canvasArea =
@@ -547,6 +624,7 @@ export default function ProjectSpace({ id }: { id: string }) {
     tabs.push({ id: 'properties', label: mode === 'space' ? 'Material' : 'Properties', icon: <Sliders size={14} /> });
     if (mode !== 'space') tabs.push({ id: 'layers', label: 'Layers', icon: <Stack size={14} /> });
     tabs.push({ id: 'comments', label: 'Comments', icon: <ChatCircle size={14} /> });
+    tabs.push({ id: 'history', label: 'History', icon: <ClockCounterClockwise size={14} /> });
     tabs.push({ id: 'muse', label: pending.length ? `Muse · ${pending.length}` : 'Muse', icon: <Sparkle size={14} weight="fill" /> });
     const tab = tabs.some((t) => t.id === sheetTab) ? sheetTab : tabs[0].id;
 
@@ -584,6 +662,7 @@ export default function ProjectSpace({ id }: { id: string }) {
               {tab === 'properties' && <div className="[&>div]:grid [&>div]:grid-cols-2 [&>div]:gap-x-8 [&>div]:gap-y-5">{inspectorBody}</div>}
               {tab === 'layers' && layersList}
               {tab === 'comments' && commentsPanel}
+              {tab === 'history' && historyPanel}
               {tab === 'muse' && (
                 <div className="flex flex-col gap-3">
                   {pending.length ? (
@@ -607,9 +686,9 @@ export default function ProjectSpace({ id }: { id: string }) {
 
       <div className="flex min-h-0 flex-1">
         {/* left panel */}
-        <aside className="hidden w-[232px] shrink-0 flex-col border-r border-hairline lg:flex" aria-label="Layers and comments">
-          <div className="p-3"><Segmented label="Panel" value={panel} onChange={setPanel} options={[{ id: 'layers', label: 'Layers', icon: <Stack size={14} /> }, { id: 'comments', label: `Comments`, icon: <ChatCircle size={14} /> }]} /></div>
-          {panel === 'layers' ? layersList : commentsPanel}
+        <aside className="hidden w-[272px] shrink-0 flex-col border-r border-hairline lg:flex" aria-label="Layers, comments and history">
+          <div className="p-3"><Segmented label="Panel" value={panel} onChange={setPanel} options={[{ id: 'layers', label: 'Layers' }, { id: 'comments', label: 'Comments' }, { id: 'history', label: 'History' }]} /></div>
+          {panel === 'layers' ? layersList : panel === 'comments' ? commentsPanel : historyPanel}
         </aside>
 
         {/* canvas */}

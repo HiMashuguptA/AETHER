@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Sparkle, Microphone, PencilSimpleLine, Link as LinkIcon, X, Check, Globe, AppWindow, Palette, FilmStrip } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowRight, Sparkle, X, Check, Globe, AppWindow, Palette, FilmStrip } from '@phosphor-icons/react';
 import { Button } from '../../components/Button';
 import { navigate } from '../../lib/router';
-import { useApp } from '../../data/store';
-import { directionsFor, type Direction } from '../../data/muse';
-import { takePendingIdea } from '../pendingIdea';
+import { useApp, type DirectionPick } from '../../data/store';
+import { api, errorText } from '../../data/api';
+import { useSession } from '../../data/session';
+import { savePendingProject, takePendingIdea } from '../pendingIdea';
 import { stageImage } from '../../data/assets';
 import CoreViewport from '../components/CoreViewport';
 import type { Output } from '../../data/types';
+
+interface Direction { id: string; name: string; summary: string; rationale: string; accent: string; swatches: string[]; type: string; layout: string; motion: string; interaction: string; headline: string; subhead: string; visual: 'drop' | 'form' | 'lattice' | 'orbit' }
+interface Interpretation { concept: string; audience: string; brand: string; features: string[] }
+interface DirectionSet { id: string; interpretation: Interpretation | null; directions: Direction[]; source: 'ai' | 'fallback'; model: string | null }
 
 const STEPS = ['Spark', 'Directions', 'Setup'];
 const EXAMPLES = ['A launch site for a coffee roaster’s spring harvest', 'An interactive annual report for a research lab', 'A portfolio for a set design studio, one scene per production'];
@@ -22,17 +27,29 @@ const OUTPUTS: { id: Output; label: string; icon: React.ReactNode }[] = [
 export default function StartFlow() {
   const [step, setStep] = useState(0);
   const [idea, setIdea] = useState(() => takePendingIdea());
-  const [refs, setRefs] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [generating, setGenerating] = useState(false);
   const [dirs, setDirs] = useState<Direction[]>([]);
   const [chosen, setChosen] = useState<string[]>([]);
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
   const [outputs, setOutputs] = useState<Output[]>(['site']);
   const [forming, setForming] = useState(false);
+  const [set, setSet] = useState<DirectionSet | null>(null);
+  const [genError, setGenError] = useState('');
   const create = useApp((s) => s.createProject);
   const toast = useApp((s) => s.toast);
+  const signedIn = useSession((s) => s.status === 'ready');
+  const exit = () => navigate(signedIn ? 'workspace' : '#', { transition: false });
+
+  // Muse reads the idea on the server. Visitors can do this before they have an account.
+  const explore = async () => {
+    setGenerating(true); setGenError(''); setDirs([]); setChosen([]); setSet(null);
+    try {
+      const r = await api<DirectionSet>('POST', '/muse/directions', { idea: idea.trim() });
+      setSet(r); setDirs(r.directions);
+    } catch (e) { setGenError(errorText(e)); }
+    finally { setGenerating(false); }
+  };
 
   useEffect(() => {
     if (!dirs.length || name) return;
@@ -45,28 +62,33 @@ export default function StartFlow() {
       if (idea.trim().length < 12) { setError('Describe the idea in a sentence or two, at least 12 characters, so Muse has something to work with.'); return; }
       setError('');
       setStep(1);
-      setGenerating(true);
-      setDirs([]);
-      setChosen([]);
-      setTimeout(() => { setDirs(directionsFor(idea)); setGenerating(false); }, 1600);
+      void explore();
     } else if (step === 1) {
       if (!chosen.length) { setError('Choose a direction, or two to blend.'); return; }
       setError('');
       setStep(2);
     } else {
       if (!name.trim()) { setError('Give the project a name.'); return; }
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { setError('That email address doesn’t look complete. Check it, or leave it empty for now.'); return; }
       if (!outputs.length) { setError('Pick at least one thing to make.'); return; }
       setError('');
-      setForming(true);
-      const picked = dirs.filter((d) => chosen.includes(d.id));
+      const picked = chosen.map((id) => dirs.find((d) => d.id === id)!).filter(Boolean);
       const base = picked[0];
-      const blended = picked.length > 1 ? { ...base, name: `${picked[0].name} × ${picked[1].name}`, accent: picked[1].accent } : base;
-      setTimeout(() => {
-        const id = create({ name: name.trim(), idea: idea.trim(), direction: blended, outputs });
-        toast({ text: `${name.trim()} is ready. Its Core is at the Form stage.`, tone: 'success' });
-        navigate(`project-${id}`, { transition: false });
-      }, 2600);
+      const blended: DirectionPick = picked.length > 1 ? { ...base, name: `${picked[0].name} × ${picked[1].name}`.slice(0, 60), accent: picked[1].accent, swatches: [...new Set([picked[1].accent, ...base.swatches])].slice(0, 5) } : base;
+      const input = { name: name.trim(), idea: idea.trim(), direction: blended, outputs, directionSetId: set?.id };
+      if (!signedIn) {
+        // account second: keep everything, then create the project as soon as they are signed in
+        savePendingProject(input);
+        navigate('signup', { transition: false });
+        return;
+      }
+      setForming(true);
+      const started = Date.now();
+      create(input)
+        .then((id) => setTimeout(() => {
+          toast({ text: `${name.trim()} is ready. Its Core is at the Form stage.`, tone: 'success' });
+          navigate(`project-${id}`, { transition: false });
+        }, Math.max(0, 1800 - (Date.now() - started))))
+        .catch((e) => { setForming(false); setError(errorText(e)); });
     }
   };
 
@@ -79,7 +101,7 @@ export default function StartFlow() {
         <div className="relative mt-[50vh] text-center animate-rise" role="status" aria-live="polite">
           <p className="mono-label text-violet-400">Forming</p>
           <p className="mt-2 text-2xl font-light text-mist">{name}</p>
-          <p className="mt-1 text-sm text-text-3">Setting up the canvas, the brand kit and the first motion timeline</p>
+          <p className="mt-1 text-sm text-text-3">Saving your project, its first version and its motion timeline</p>
         </div>
       </div>
     );
@@ -88,7 +110,7 @@ export default function StartFlow() {
   return (
     <div className="relative mx-auto flex min-h-[100svh] max-w-[1120px] flex-col px-5 pb-10 pt-6 md:px-10">
       <header className="flex items-center justify-between">
-        <button onClick={() => navigate('workspace', { transition: false })} className="flex items-center gap-2 text-sm text-text-3 hover:text-mist"><X size={16} /> Close</button>
+        <button onClick={exit} className="flex items-center gap-2 text-sm text-text-3 hover:text-mist"><X size={16} /> Close</button>
         <ol className="flex items-center gap-2" aria-label="Steps">
           {STEPS.map((s, i) => (
             <li key={s} className="flex items-center gap-2" aria-current={i === step ? 'step' : undefined}>
@@ -105,7 +127,7 @@ export default function StartFlow() {
           <section className="animate-rise" aria-labelledby="s0">
             <img src={stageImage.spark} alt="" className="mb-6 h-16 w-16 rounded-full object-cover" />
             <h1 id="s0" className="display-3 max-w-[760px] text-mist">What are we making?</h1>
-            <p className="mt-3 max-w-[560px] text-text-2">Start with a sentence. Add a sketch, a voice note or a reference if you have one. Muse will propose three directions.</p>
+            <p className="mt-3 max-w-[560px] text-text-2">Start with a sentence or two. Muse will read it and propose three directions.</p>
             <label htmlFor="idea-text" className="sr-only">Describe your idea</label>
             <textarea
               id="idea-text"
@@ -118,20 +140,6 @@ export default function StartFlow() {
               aria-invalid={!!error}
               aria-describedby={error ? 'flow-error' : undefined}
             />
-            <div className="mt-3 flex flex-wrap gap-2">
-              {[
-                { k: 'Sketch', i: <PencilSimpleLine size={14} /> },
-                { k: 'Voice note', i: <Microphone size={14} /> },
-                { k: 'Reference link', i: <LinkIcon size={14} /> },
-              ].map((r) => {
-                const on = refs.includes(r.k);
-                return (
-                  <button key={r.k} onClick={() => setRefs((v) => (on ? v.filter((x) => x !== r.k) : [...v, r.k]))} aria-pressed={on} className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm ${on ? 'border-violet-400/60 bg-violet-500/10 text-violet-200' : 'border-hairline text-text-3 hover:text-mist'}`}>
-                    {r.i} {on ? `${r.k} added` : `Add ${r.k.toLowerCase()}`}
-                  </button>
-                );
-              })}
-            </div>
             <div className="mt-8">
               <p className="mono-label text-text-4">Or start from</p>
               <div className="mt-2 flex flex-col gap-2 md:flex-row">
@@ -143,11 +151,28 @@ export default function StartFlow() {
 
         {step === 1 && (
           <section className="animate-rise" aria-labelledby="s1" aria-busy={generating}>
-            <div className="flex items-center gap-2"><Sparkle size={16} weight="fill" className="text-violet-400" /><p className="mono-label text-violet-400">Muse · three directions</p></div>
-            <h1 id="s1" className="display-3 mt-3 max-w-[760px] text-mist">{generating ? 'Reading your idea' : 'Choose a direction'}</h1>
+            <div className="flex items-center gap-2"><Sparkle size={16} weight="fill" className="text-violet-400" /><p className="mono-label text-violet-400">Muse · three directions{set?.source === 'ai' && set.model ? ` · ${set.model}` : ''}</p></div>
+            <h1 id="s1" className="display-3 mt-3 max-w-[760px] text-mist">{generating ? 'Reading your idea' : genError ? 'Muse could not answer' : 'Choose a direction'}</h1>
             <p className="mt-3 max-w-[620px] text-text-2">“{idea}”</p>
+            {set?.source === 'fallback' && (
+              <p className="mt-4 max-w-[720px] rounded-2xl border border-yellow-500/40 bg-yellow-500/[0.06] px-4 py-3 text-sm leading-6 text-text-2" role="note"><span className="mono-label mr-2 text-yellow-500">Development fallback</span>No AI provider is configured in this environment, so these directions come from built-in templates, not from a model.</p>
+            )}
+            {set?.source === 'ai' && set.interpretation && (
+              <div className="mt-5 grid max-w-[980px] grid-cols-1 gap-x-8 gap-y-3 rounded-2xl border border-violet-400/25 bg-violet-500/[0.04] p-4 text-sm md:grid-cols-2">
+                <div><p className="mono-label text-violet-300">How Muse reads it</p><p className="mt-1 leading-6 text-text-2">{set.interpretation.concept}</p></div>
+                <div><p className="mono-label text-violet-300">Who it is for</p><p className="mt-1 leading-6 text-text-2">{set.interpretation.audience}</p></div>
+                <div><p className="mono-label text-violet-300">Brand</p><p className="mt-1 leading-6 text-text-2">{set.interpretation.brand}</p></div>
+                {set.interpretation.features.length > 0 && <div><p className="mono-label text-violet-300">Worth building</p><ul className="mt-1 list-disc pl-4 leading-6 text-text-2">{set.interpretation.features.map((f) => <li key={f}>{f}</li>)}</ul></div>}
+              </div>
+            )}
+            {genError && (
+              <div className="mt-6 max-w-[620px] rounded-2xl border border-red-500/40 p-4" role="alert">
+                <p className="text-sm leading-6 text-text-2">{genError}</p>
+                <Button className="mt-3" variant="muse" onClick={() => void explore()}>Try again</Button>
+              </div>
+            )}
             <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-              {(generating ? [0, 1, 2] : dirs).map((d, i) => {
+              {(generating ? [0, 1, 2] : genError ? [] : dirs).map((d, i) => {
                 if (typeof d === 'number') {
                   return (
                     <div key={i} className="card flex flex-col gap-3 p-4" aria-hidden="true">
@@ -177,13 +202,16 @@ export default function StartFlow() {
                     <p className="mt-1 text-sm leading-5 text-text-3">{d.summary}</p>
                     <dl className="mt-4 grid grid-cols-[64px_1fr] gap-y-1 text-xs">
                       <dt className="text-text-4">Type</dt><dd className="text-text-2">{d.type}</dd>
-                      <dt className="text-text-4">Motion</dt><dd className="font-mono text-text-2">{d.motion}</dd>
+                      <dt className="text-text-4">Motion</dt><dd className="text-text-2">{d.motion}</dd>
+                      {d.layout ? <><dt className="text-text-4">Layout</dt><dd className="text-text-2">{d.layout}</dd></> : null}
+                      {d.interaction ? <><dt className="text-text-4">Feel</dt><dd className="text-text-2">{d.interaction}</dd></> : null}
                     </dl>
+                    {d.rationale ? <p className="mt-3 border-t border-hairline pt-3 text-xs leading-5 text-text-3">{d.rationale}</p> : null}
                   </button>
                 );
               })}
             </div>
-            {!generating && <p className="mt-4 text-sm text-text-3">Pick one, or select two to blend them. {picked.length === 2 && <span className="text-violet-300">Blending {picked[0].name} with {picked[1].name}’s accent.</span>}</p>}
+            {!generating && !genError && <p className="mt-4 text-sm text-text-3">Pick one, or select two to blend them. {picked.length === 2 && <span className="text-violet-300">Blending {picked[0].name} with {picked[1].name}’s accent.</span>}</p>}
           </section>
         )}
 
@@ -212,11 +240,9 @@ export default function StartFlow() {
                     })}
                   </div>
                 </fieldset>
-                <label className="flex flex-col gap-2">
-                  <span className="text-sm text-text-2">Email for your workspace <span className="text-text-4">(optional in this demo)</span></span>
-                  <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(''); }} placeholder="you@studio.com" className="h-12 rounded-xl border border-hairline-strong bg-white/[0.03] px-4 text-mist placeholder:text-text-4 focus:border-violet-400/70 focus:outline-none" />
-                  <span className="text-xs text-text-4">No account is created and nothing is sent. This is where sign-up would sit: after you have seen the idea take shape.</span>
-                </label>
+                {!signedIn && (
+                  <p className="rounded-2xl border border-hairline-strong p-4 text-sm leading-6 text-text-2">Next you will create a free account so this project can be saved. Your idea, the direction you chose and these settings are kept, and the project opens as soon as you are in. <button type="button" onClick={() => { useSession.getState().setReturnTo('start'); navigate('signin', { transition: false }); }} className="text-violet-300 hover:text-violet-200">Already have an account?</button></p>
+                )}
               </div>
             </div>
             <aside className="card self-start p-4">
@@ -239,9 +265,9 @@ export default function StartFlow() {
       </div>
 
       <footer className="flex items-center justify-between border-t border-hairline pt-5">
-        <Button variant="tertiary" icon={<ArrowLeft size={16} />} onClick={() => (step === 0 ? navigate('workspace', { transition: false }) : setStep(step - 1))}>{step === 0 ? 'Cancel' : 'Back'}</Button>
-        <Button variant={step === 1 ? 'muse' : 'primary'} size="lg" iconRight={<ArrowRight size={16} />} onClick={next} disabled={generating}>
-          {step === 0 ? 'Show me directions' : step === 1 ? 'Continue' : 'Create project'}
+        <Button variant="tertiary" icon={<ArrowLeft size={16} />} onClick={() => (step === 0 ? exit() : setStep(step - 1))}>{step === 0 ? 'Cancel' : 'Back'}</Button>
+        <Button variant={step === 1 ? 'muse' : 'primary'} size="lg" iconRight={<ArrowRight size={16} />} onClick={next} disabled={generating || (step === 1 && !!genError)}>
+          {step === 0 ? 'Show me directions' : step === 1 ? 'Continue' : signedIn ? 'Create project' : 'Continue to create account'}
         </Button>
       </footer>
     </div>

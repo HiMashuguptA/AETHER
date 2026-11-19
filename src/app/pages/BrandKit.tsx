@@ -1,5 +1,6 @@
 import { Copy } from '@phosphor-icons/react';
 import { useApp } from '../../data/store';
+import { BrandEditor } from './BrandEditor';
 
 const COLORS = [
   { group: 'Surfaces', items: [['Obsidian', '#000000', 'Base canvas'], ['Graphite', '#181818', 'Surfaces'], ['Raised', '#1F1F1F', 'Elevation 1'], ['Raised 2', '#272727', 'Elevation 2'], ['Raised 3', '#313131', 'Elevation 3']] },
@@ -29,6 +30,9 @@ export default function BrandKit() {
   return (
     <div className="mx-auto max-w-[1200px] px-4 py-8 md:px-8 md:py-10">
       <h1 className="text-3xl font-light tracking-[-0.02em] text-mist md:text-4xl">Brand kit</h1>
+      <p className="mt-1 max-w-[640px] text-sm text-text-3">Your brand, and the ÆTHER system it sits on.</p>
+      <BrandEditor />
+      <h2 className="mt-14 text-xl font-light text-mist">ÆTHER system</h2>
       <p className="mt-1 max-w-[640px] text-sm text-text-3">The approved ÆTHER system. Colour is light, not paint: surfaces stay flat, and violet is the only interactive accent.</p>
       {COLORS.map((g) => (
         <section key={g.group} className="mt-10" aria-labelledby={`bk-${g.group}`}>

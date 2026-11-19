@@ -15,6 +15,11 @@ package under `node_modules/` after `npm install`.
 | lenis | MIT | Smooth scrolling on the story site |
 | zustand | MIT | Local state for the mocked workspace |
 | @phosphor-icons/react | MIT | Icons |
+| hono, @hono/node-server | MIT | API framework |
+| better-auth | MIT | Authentication |
+| pg | MIT | Postgres client |
+| zod | MIT | Validation shared by browser and server |
+| @vercel/blob, @vercel/oidc | Apache-2.0 | File storage client; deployment identity for AI Gateway |
 | gsap | Standard "No Charge" GSAP License (Webflow) | Not open source. Free for commercial use, but the licence prohibits using GSAP in tools that let users build animations through a visual interface in a way that competes with Webflow. In this prototype GSAP drives only the marketing story site (`src/experience`, `src/lib/scroll.ts`). The workspace's Motion editor uses the browser's Web Animations API instead, and should stay GSAP-free if AETHER is ever built as a real product. Terms: https://gsap.com/standard-license |
 
 ## Fonts
@@ -43,4 +48,4 @@ package under `node_modules/` after `npm install`.
 
 ## Build tools (not shipped to visitors)
 
-vite (MIT), @vitejs/plugin-react (MIT), tailwindcss and @tailwindcss/vite (MIT), typescript (Apache-2.0).
+vite (MIT), @vitejs/plugin-react (MIT), tailwindcss and @tailwindcss/vite (MIT), typescript (Apache-2.0), vitest (MIT), @playwright/test (Apache-2.0), tsx (MIT), esbuild (MIT).
